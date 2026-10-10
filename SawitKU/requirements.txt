@@ -1,0 +1,5 @@
+Flask>=3.0
+PyMySQL>=1.1
+Pillow>=10.0
+python-dotenv>=1.0
+gunicorn>=22.0
