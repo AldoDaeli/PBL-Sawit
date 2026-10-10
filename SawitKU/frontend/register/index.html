@@ -1,0 +1,57 @@
+<!doctype html><html lang="id"><head>
+<title>Daftar | SawitKu</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="no-referrer">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="/shared/tailwind.js"></script>
+<link rel="stylesheet" href="/register/style.css">
+</head>
+<body class="font-sans text-slate-800 antialiased">
+<div class="nature-bg min-h-screen flex items-center justify-center p-4 sm:p-8 relative overflow-hidden">
+  <div class="blob w-[26rem] h-[26rem] bg-brand-300/40 -top-28 -right-28 animate-float"></div>
+  <div class="blob w-[30rem] h-[30rem] bg-brand-500/20 -bottom-36 -left-24 animate-float" style="animation-delay:-3s"></div>
+  <div class="blob w-56 h-56 bg-sun-400/20 top-1/4 left-12 animate-float" style="animation-delay:-1.6s"></div>
+  <svg aria-hidden="true" class="daun w-20 h-20 top-10 right-10 hidden sm:block animate-sway" viewBox="0 0 24 24" fill="currentColor"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.5 19 2c1 2 2 4.2 2 8 0 5.5-4.8 10-10 10z M2 21c0-3 1.9-5.4 5.1-6C9.5 14.5 12 13 13 12"/></svg>
+  <svg aria-hidden="true" class="daun w-14 h-14 bottom-16 right-16 hidden lg:block animate-sway" style="animation-delay:-2s" viewBox="0 0 24 24" fill="currentColor"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.5 19 2c1 2 2 4.2 2 8 0 5.5-4.8 10-10 10z M2 21c0-3 1.9-5.4 5.1-6C9.5 14.5 12 13 13 12"/></svg>
+  <svg aria-hidden="true" class="daun w-24 h-24 bottom-10 left-16 hidden sm:block animate-sway" style="animation-delay:-1s" viewBox="0 0 24 24" fill="currentColor"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.5 19 2c1 2 2 4.2 2 8 0 5.5-4.8 10-10 10z M2 21c0-3 1.9-5.4 5.1-6C9.5 14.5 12 13 13 12"/></svg>
+  <a href="/" class="absolute top-5 right-5 sm:top-8 sm:right-10 z-10 text-sm font-semibold text-brand-800 hover:text-brand-900 bg-white/80 backdrop-blur px-4 py-2 rounded-full shadow-sm transition">&larr; Beranda</a>
+
+  <div class="relative z-10 w-full max-w-md animate-fade-up">
+    <div class="bg-white/90 backdrop-blur-xl rounded-[2rem] shadow-2xl shadow-brand-900/10 ring-1 ring-white/70 p-8 sm:p-11">
+      <div class="flex flex-col items-center text-center mb-7">
+        <span class="w-14 h-14 rounded-2xl bg-brand-600 text-white grid place-items-center shadow-lg shadow-brand-600/30 mb-3" id="logo"></span>
+        <p class="font-extrabold text-xl">Sawit<span class="text-sun-500">Ku</span></p>
+      </div>
+      <div class="flex gap-8 justify-center border-b border-slate-200 mb-7">
+        <a href="/masuk" class="pb-3 font-bold text-slate-400 hover:text-brand-600 text-lg transition">Masuk</a>
+        <a class="pb-3 font-bold text-brand-700 border-b-2 border-brand-600 -mb-px text-lg">Daftar</a>
+      </div>
+      <h1 id="judul" class="text-2xl font-extrabold text-center">Buat akun baru</h1>
+      <p id="sub" class="text-slate-500 text-sm mt-1.5 text-center">Gratis, cukup satu menit.</p>
+      <form id="form" class="mt-7 space-y-4" novalidate autocomplete="on">
+        <div><div class="campur"><span class="ikon" id="i-user"></span><input id="username" placeholder="Username" autocomplete="username" maxlength="20" aria-label="Username"></div><p class="bantu" id="e-username"></p></div>
+        <div><div class="campur"><span class="ikon" id="i-mail"></span><input id="email" type="email" placeholder="Email" autocomplete="email" maxlength="100" aria-label="Email"></div><p class="bantu" id="e-email"></p></div>
+        <div><div class="campur"><span class="ikon" id="i-lock"></span><input id="password" type="password" placeholder="Password" autocomplete="new-password" maxlength="64" aria-label="Password"><button type="button" id="lihat" class="px-3 text-slate-400 hover:text-brand-600" aria-label="Tampilkan password"></button></div>
+          <div class="flex gap-1 mt-2" aria-hidden="true"><i class="kuat"></i><i class="kuat"></i><i class="kuat"></i><i class="kuat"></i></div><p class="bantu" id="e-password"></p></div>
+        <div><div class="campur"><span class="ikon" id="i-lock2"></span><input id="konfirmasi" type="password" placeholder="Ulangi password" autocomplete="new-password" maxlength="64" aria-label="Ulangi password"></div><p class="bantu" id="e-konfirmasi"></p></div>
+        <p id="err" class="text-sm text-rose-600 min-h-5" role="alert"></p>
+        <button id="btn" class="w-full h-12 rounded-full bg-brand-500 hover:bg-brand-600 text-white font-bold shadow-lg shadow-brand-500/30 transition active:scale-[.98] disabled:opacity-60">Daftar</button>
+      </form>
+      <form id="form-otp" class="hidden mt-7 space-y-4" novalidate autocomplete="off">
+        <p class="text-sm text-slate-600 text-center">Kami mengirim kode 6 angka ke <b id="otp-email" class="text-slate-800 break-all"></b>. Berlaku <span id="otp-menit">10</span> menit. Cek juga folder spam.</p>
+        <div class="campur"><span class="ikon" id="i-otp"></span><input id="kode" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="------" autocomplete="one-time-code" aria-label="Kode OTP 6 angka" class="text-center font-bold tracking-[.6em] text-lg"></div>
+        <p id="err-otp" class="text-sm text-rose-600 min-h-5" role="alert"></p>
+        <button id="btn-otp" class="w-full h-12 rounded-full bg-brand-500 hover:bg-brand-600 text-white font-bold shadow-lg shadow-brand-500/30 transition active:scale-[.98] disabled:opacity-60">Verifikasi &amp; Buat Akun</button>
+        <div class="flex justify-between items-center text-sm"><button type="button" id="ulang" class="font-bold text-brand-600 hover:underline disabled:text-slate-400 disabled:no-underline" disabled>Kirim ulang kode</button><button type="button" id="ubah" class="text-slate-500 hover:text-brand-600">Ubah data</button></div>
+      </form>
+      <p class="mt-6 text-sm text-slate-500 text-center">Sudah punya akun? <a href="/masuk" class="font-bold text-brand-600 hover:underline">Masuk</a></p>
+    </div>
+  </div>
+</div>
+
+<script src="/shared/core.js"></script>
+<script src="/register/script.js"></script>
+</body></html>
