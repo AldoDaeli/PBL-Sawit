@@ -1,0 +1,218 @@
+[
+ {
+  "id": 1,
+  "nama": "Monstera Deliciosa",
+  "kategori": "Tanaman Hias Daun",
+  "harga": 185000,
+  "stok": 24,
+  "terjual": 132,
+  "rating": 4.8,
+  "bestSeller": true,
+  "gambar": "https://loremflickr.com/640/640/monstera?lock=1",
+  "deskripsi": "Daun berlubang khas yang mempercantik ruang tamu. Tumbuh cepat dan mudah dirawat.",
+  "spesifikasi": {
+   "Tinggi": "40–50 cm",
+   "Pot": "Plastik 20 cm",
+   "Cahaya": "Teduh terang",
+   "Penyiraman": "2–3 kali seminggu"
+  }
+ },
+ {
+  "id": 2,
+  "nama": "Sansevieria Trifasciata",
+  "kategori": "Tanaman Hias Daun",
+  "harga": 75000,
+  "stok": 60,
+  "terjual": 210,
+  "rating": 4.9,
+  "bestSeller": true,
+  "gambar": "https://loremflickr.com/640/640/sansevieria?lock=2",
+  "deskripsi": "Lidah mertua penyaring udara. Tahan kurang air sehingga cocok untuk pemula.",
+  "spesifikasi": {
+   "Tinggi": "30–40 cm",
+   "Pot": "Tanah liat 15 cm",
+   "Cahaya": "Rendah hingga terang",
+   "Penyiraman": "1 kali seminggu"
+  }
+ },
+ {
+  "id": 3,
+  "nama": "Kaktus Mini Set 3",
+  "kategori": "Sukulen & Kaktus",
+  "harga": 60000,
+  "stok": 40,
+  "terjual": 98,
+  "rating": 4.6,
+  "bestSeller": false,
+  "gambar": "https://loremflickr.com/640/640/cactus?lock=3",
+  "deskripsi": "Tiga kaktus mini untuk hiasan meja kerja. Minim perawatan.",
+  "spesifikasi": {
+   "Tinggi": "8–12 cm",
+   "Pot": "Keramik mini",
+   "Cahaya": "Matahari langsung",
+   "Penyiraman": "2 minggu sekali"
+  }
+ },
+ {
+  "id": 4,
+  "nama": "Anggrek Bulan Putih",
+  "kategori": "Tanaman Berbunga",
+  "harga": 250000,
+  "stok": 12,
+  "terjual": 57,
+  "rating": 4.7,
+  "bestSeller": true,
+  "gambar": "https://loremflickr.com/640/640/orchid?lock=4",
+  "deskripsi": "Anggrek bulan berbunga lebat, pilihan tepat untuk hadiah.",
+  "spesifikasi": {
+   "Tinggi": "50 cm",
+   "Pot": "Pot bening",
+   "Cahaya": "Teduh terang",
+   "Penyiraman": "1–2 kali seminggu"
+  }
+ },
+ {
+  "id": 5,
+  "nama": "Aglonema Red Sumatra",
+  "kategori": "Tanaman Hias Daun",
+  "harga": 120000,
+  "stok": 18,
+  "terjual": 76,
+  "rating": 4.5,
+  "bestSeller": false,
+  "gambar": "https://loremflickr.com/640/640/aglaonema?lock=5",
+  "deskripsi": "Daun merah menyala yang tahan ruangan. Cocok untuk sudut minimalis.",
+  "spesifikasi": {
+   "Tinggi": "25–35 cm",
+   "Pot": "Plastik 18 cm",
+   "Cahaya": "Teduh",
+   "Penyiraman": "2 kali seminggu"
+  }
+ },
+ {
+  "id": 6,
+  "nama": "Pothos Golden Gantung",
+  "kategori": "Tanaman Gantung",
+  "harga": 55000,
+  "stok": 45,
+  "terjual": 141,
+  "rating": 4.7,
+  "bestSeller": true,
+  "gambar": "https://loremflickr.com/640/640/pothos?lock=6",
+  "deskripsi": "Sulur menjuntai yang cantik di rak dan jendela. Sangat mudah tumbuh.",
+  "spesifikasi": {
+   "Panjang": "30–40 cm",
+   "Pot": "Gantung 14 cm",
+   "Cahaya": "Teduh terang",
+   "Penyiraman": "2 kali seminggu"
+  }
+ },
+ {
+  "id": 7,
+  "nama": "Echeveria Sukulen",
+  "kategori": "Sukulen & Kaktus",
+  "harga": 35000,
+  "stok": 80,
+  "terjual": 188,
+  "rating": 4.6,
+  "bestSeller": false,
+  "gambar": "https://loremflickr.com/640/640/echeveria?lock=7",
+  "deskripsi": "Sukulen roset berwarna lembut, cantik untuk terarium.",
+  "spesifikasi": {
+   "Diameter": "6–8 cm",
+   "Pot": "Mini 8 cm",
+   "Cahaya": "Terang",
+   "Penyiraman": "10 hari sekali"
+  }
+ },
+ {
+  "id": 8,
+  "nama": "Calathea Orbifolia",
+  "kategori": "Tanaman Hias Daun",
+  "harga": 145000,
+  "stok": 9,
+  "terjual": 44,
+  "rating": 4.4,
+  "bestSeller": false,
+  "gambar": "https://loremflickr.com/640/640/calathea?lock=8",
+  "deskripsi": "Daun lebar bergaris perak yang elegan. Suka kelembapan tinggi.",
+  "spesifikasi": {
+   "Tinggi": "35 cm",
+   "Pot": "Plastik 18 cm",
+   "Cahaya": "Teduh",
+   "Penyiraman": "3 kali seminggu"
+  }
+ },
+ {
+  "id": 9,
+  "nama": "Peace Lily",
+  "kategori": "Tanaman Berbunga",
+  "harga": 95000,
+  "stok": 22,
+  "terjual": 63,
+  "rating": 4.5,
+  "bestSeller": false,
+  "gambar": "https://loremflickr.com/640/640/peace,lily?lock=9",
+  "deskripsi": "Berbunga putih sepanjang tahun dan membantu menyegarkan udara.",
+  "spesifikasi": {
+   "Tinggi": "40 cm",
+   "Pot": "Plastik 16 cm",
+   "Cahaya": "Teduh",
+   "Penyiraman": "2 kali seminggu"
+  }
+ },
+ {
+  "id": 10,
+  "nama": "Pot Keramik Putih 20 cm",
+  "kategori": "Pot & Media Tanam",
+  "harga": 45000,
+  "stok": 50,
+  "terjual": 120,
+  "rating": 4.8,
+  "bestSeller": false,
+  "gambar": "https://loremflickr.com/640/640/ceramic,pot?lock=10",
+  "deskripsi": "Pot keramik glossy dengan lubang drainase dan alas.",
+  "spesifikasi": {
+   "Diameter": "20 cm",
+   "Bahan": "Keramik",
+   "Warna": "Putih",
+   "Drainase": "Ada"
+  }
+ },
+ {
+  "id": 11,
+  "nama": "Media Tanam Premium 5 kg",
+  "kategori": "Pot & Media Tanam",
+  "harga": 40000,
+  "stok": 70,
+  "terjual": 95,
+  "rating": 4.7,
+  "bestSeller": false,
+  "gambar": "https://loremflickr.com/640/640/soil,gardening?lock=11",
+  "deskripsi": "Campuran tanah, sekam, dan kompos yang gembur dan porous.",
+  "spesifikasi": {
+   "Berat": "5 kg",
+   "Komposisi": "Tanah, sekam, kompos",
+   "pH": "6–7",
+   "Cocok": "Tanaman hias"
+  }
+ },
+ {
+  "id": 12,
+  "nama": "Pupuk Organik Cair 250 ml",
+  "kategori": "Perawatan",
+  "harga": 30000,
+  "stok": 64,
+  "terjual": 110,
+  "rating": 4.6,
+  "bestSeller": false,
+  "gambar": "https://loremflickr.com/640/640/fertilizer,garden?lock=12",
+  "deskripsi": "Nutrisi harian untuk daun lebih hijau dan akar sehat.",
+  "spesifikasi": {
+   "Isi": "250 ml",
+   "Dosis": "5 ml per liter",
+   "Frekuensi": "2 minggu sekali",
+   "Jenis": "Organik"
+  }
+ }
+]
