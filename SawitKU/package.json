@@ -1,0 +1,10 @@
+{
+  "name": "sawitku-frontend",
+  "private": true,
+  "description": "Opsional: build Tailwind menjadi satu berkas CSS statis (frontend/shared/app.css) agar halaman tidak lagi memuat Tailwind CDN yang berat.",
+  "scripts": {
+    "css": "tailwindcss -c tailwind.config.js -i frontend/src/tailwind.css -o frontend/shared/app.css --minify",
+    "css:watch": "tailwindcss -c tailwind.config.js -i frontend/src/tailwind.css -o frontend/shared/app.css --watch"
+  },
+  "devDependencies": { "tailwindcss": "3.4.17" }
+}
