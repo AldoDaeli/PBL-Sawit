@@ -1,0 +1,19 @@
+services:
+  webapp:
+    image: sawitku:latest
+    container_name: webapp
+    ports:
+      - "80:8000"
+    environment:
+      DB_HOST: 192.168.30.10
+      DB_PORT: 3306
+      DB_NAME: pbl304_db
+      DB_USER: admin_dimas
+      DB_PASSWORD: ${DB_PASSWORD}
+      PROXY_HOPS: 1
+    volumes:
+      - uploads:/srv/uploads
+    restart: always
+
+volumes:
+  uploads:
