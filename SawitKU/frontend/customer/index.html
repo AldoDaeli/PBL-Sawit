@@ -1,0 +1,44 @@
+<!doctype html><html lang="id"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="no-referrer"><meta name="robots" content="noindex"><title>Dashboard Customer | SawitKu</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script><script src="/shared/tailwind.js"></script><link rel="stylesheet" href="/customer/style.css">
+</head>
+<body class="font-sans text-slate-800 antialiased"><div id="app" class="flex min-h-screen" hidden>
+<div id="overlay" class="hidden fixed inset-0 bg-slate-900/50 z-50 lg:hidden"></div>
+<aside id="sidebar" class="sidebar bg-white shadow-xl shadow-slate-200/60 flex flex-col p-4 sticky top-0 h-screen shrink-0 overflow-y-auto overflow-x-hidden" aria-label="Navigasi utama">
+  <a href="/" class="flex items-center gap-3 px-2 h-12 font-extrabold text-xl text-brand-700"><span class="w-10 h-10 rounded-xl bg-brand-600 text-white grid place-items-center shrink-0" id="logo"></span><span class="lbl">Sawit<span class="text-sun-500">Ku</span></span></a>
+  <div class="kartu-profil flex items-center gap-3 p-3 my-5 rounded-2xl bg-brand-50"><span class="js-avatar w-11 h-11 rounded-full overflow-hidden shrink-0"></span><div class="lbl min-w-0"><b class="js-user block truncate text-sm"></b><span class="text-xs text-slate-500">Customer</span></div></div>
+  <nav class="flex flex-col gap-1.5 flex-1"><a href="#ringkasan" data-sec="ringkasan" data-ikon="home" class="nav-item"><span class="ic"></span><span class="lbl">Ringkasan</span></a><a href="#keranjang" data-sec="keranjang" data-ikon="cart" class="nav-item"><span class="ic"></span><span class="lbl">Keranjang</span></a><a href="#pesanan" data-sec="pesanan" data-ikon="box" class="nav-item"><span class="ic"></span><span class="lbl">Pesanan Saya</span></a><a href="#favorit" data-sec="favorit" data-ikon="heart" class="nav-item"><span class="ic"></span><span class="lbl">Favorit</span></a><a href="#statistik" data-sec="statistik" data-ikon="chart" class="nav-item"><span class="ic"></span><span class="lbl">Statistik Belanja</span></a><a href="#pesan" data-sec="pesan" data-ikon="msg" class="nav-item"><span class="ic"></span><span class="lbl">Pesan Admin</span></a><a href="#profil" data-sec="profil" data-ikon="user" class="nav-item"><span class="ic"></span><span class="lbl">Kelola Profil</span></a></nav>
+  <button id="btn-logout" class="nav-item w-full mt-4 text-rose-600 hover:!bg-rose-50 hover:!text-rose-700"><span data-ikon="out"></span><span class="lbl">Keluar</span></button>
+</aside>
+<div class="flex-1 min-w-0 flex flex-col">
+  <header class="sticky top-0 z-30 h-16 bg-white/85 backdrop-blur flex items-center gap-3 px-4 sm:px-6 border-b border-slate-100">
+    <button id="btn-side" class="w-10 h-10 grid place-items-center rounded-xl hover:bg-brand-50 text-slate-600 transition" aria-label="Buka atau tutup menu samping" aria-expanded="true"><span id="ikon-menu"></span></button>
+    <h1 id="judul" class="font-extrabold text-lg"></h1>
+    <div class="ml-auto flex items-center gap-3"><a href="/" class="btn btn-o hidden sm:inline-flex">Lihat Toko</a><span class="js-avatar w-9 h-9 rounded-full overflow-hidden"></span></div>
+  </header>
+  <main class="p-4 sm:p-6 lg:p-8 max-w-6xl w-full mx-auto">
+<section id="sec-ringkasan" class="sec space-y-6"><div id="r-stat" class="grid sm:grid-cols-3 gap-5"></div>
+  <div class="grid lg:grid-cols-3 gap-6"><div class="panel lg:col-span-2"><h2 class="font-extrabold mb-4">Belanja Minggu Ini</h2><div id="r-grafik"></div></div><div class="panel"><h2 class="font-extrabold mb-4">Status Pesanan</h2><div id="r-donut"></div></div></div>
+  <div class="panel"><div class="flex justify-between items-center mb-3"><h2 class="font-extrabold">Pesanan Terbaru</h2><a href="#pesanan" class="text-sm font-bold text-brand-600">Lihat semua</a></div><div id="r-terbaru" class="divide-y divide-slate-100"></div></div></section>
+<section id="sec-keranjang" class="sec hidden"><div id="k-isi"></div></section>
+<section id="sec-pesanan" class="sec hidden space-y-4"><div id="p-tab" class="flex gap-2 flex-wrap"></div><div id="p-isi" class="space-y-4"></div></section>
+<section id="sec-favorit" class="sec hidden"><div id="f-isi" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5"></div></section>
+<section id="sec-statistik" class="sec hidden space-y-6"><div id="s-tab" class="flex gap-2 flex-wrap"></div><div class="grid sm:grid-cols-3 gap-5" id="s-kartu"></div>
+  <div class="grid lg:grid-cols-2 gap-6"><div class="panel"><h2 class="font-extrabold mb-4">Total Belanja</h2><div id="s-bar"></div></div><div class="panel"><h2 class="font-extrabold mb-4">Jumlah Pesanan</h2><div id="s-area"></div></div></div></section>
+<section id="sec-pesan" class="sec hidden"><div class="panel !p-0 overflow-hidden max-w-3xl"><div class="px-5 py-4 border-b border-slate-100"><h2 class="font-extrabold">Chat dengan Admin</h2><p class="text-sm text-slate-500">Tanya soal produk atau pesananmu. Balasan admin muncul di sini.</p></div><div id="chat-root" class="h-[65vh]"></div></div></section>
+<section id="sec-profil" class="sec hidden"><form id="pf" class="panel max-w-xl space-y-5" novalidate>
+  <div class="flex items-center gap-5"><span id="pf-foto" class="w-24 h-24 rounded-full overflow-hidden ring-4 ring-brand-100"></span><div><label class="btn btn-o cursor-pointer">Unggah Foto<input id="pf-file" type="file" accept="image/jpeg,image/png,image/webp" class="hidden"></label><p class="text-xs text-slate-500 mt-2">JPG, PNG, atau WEBP. Maksimal 2 MB.</p></div></div>
+  <div><label class="text-sm font-semibold" for="pf-user">Username</label><input id="pf-user" class="in mt-1" maxlength="20" autocomplete="username"></div>
+  <div><label class="text-sm font-semibold" for="pf-email">Email</label><div class="flex gap-2"><input id="pf-email" type="email" class="in mt-1 flex-1 bg-slate-50" maxlength="100" autocomplete="email" readonly><button type="button" id="pf-ganti-email" class="btn btn-o mt-1 shrink-0">Ganti</button></div><p class="text-xs text-slate-500 mt-1">Mengganti email butuh password dan kode OTP yang dikirim ke email baru.</p></div>
+  <div class="pt-2 border-t border-slate-100"><h3 class="font-bold">Alamat Pengiriman</h3><p class="text-xs text-slate-500">Dipakai otomatis saat checkout. Kosongkan semua kolom untuk menghapus.</p></div>
+  <div><label class="text-sm font-semibold" for="pf-tel">Nomor HP</label><input id="pf-tel" class="in mt-1" maxlength="20" inputmode="tel" placeholder="081234567890" autocomplete="tel"></div>
+  <div><label class="text-sm font-semibold" for="pf-alm">Alamat lengkap</label><textarea id="pf-alm" rows="3" maxlength="200" class="in mt-1 !h-auto py-2" placeholder="Jalan, nomor rumah, RT/RW, kelurahan" autocomplete="street-address"></textarea></div>
+  <div class="grid grid-cols-2 gap-3"><div><label class="text-sm font-semibold" for="pf-kota">Kota/Kabupaten</label><input id="pf-kota" class="in mt-1" maxlength="60" autocomplete="address-level2"></div><div><label class="text-sm font-semibold" for="pf-pos">Kode pos</label><input id="pf-pos" class="in mt-1" maxlength="5" inputmode="numeric" autocomplete="postal-code"></div></div>
+  <p id="pf-err" class="text-sm text-rose-600 min-h-5" role="alert"></p><button class="btn btn-p">Simpan Perubahan</button></form></section>
+  </main>
+</div></div>
+<script src="/shared/core.js"></script><script src="/shared/chat.js"></script><script src="/customer/script.js"></script>
+</body></html>
