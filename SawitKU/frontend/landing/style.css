@@ -1,0 +1,20 @@
+html { scroll-behavior: smooth; scroll-padding-top: 9rem; }
+/* Animasi muncul saat di-scroll (dipasang oleh Animasi.reveal) */
+[data-reveal] { opacity: 0; transform: translateY(28px); transition: opacity .7s cubic-bezier(.2,.8,.2,1), transform .7s cubic-bezier(.2,.8,.2,1); }
+[data-reveal].tampil { opacity: 1; transform: none; }
+/* Slider hero */
+.slide { position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: opacity .7s ease, visibility .7s; }
+.slide.aktif { opacity: 1; visibility: visible; }
+.slide.aktif .s-teks > * { animation: fade-up-s .7s cubic-bezier(.2,.8,.2,1) both; }
+.slide.aktif .s-teks > *:nth-child(2) { animation-delay: .1s; } .slide.aktif .s-teks > *:nth-child(3) { animation-delay: .2s; } .slide.aktif .s-teks > *:nth-child(4) { animation-delay: .3s; }
+.slide.aktif .s-gambar { animation: zoom-s 6s ease-out both; }
+@keyframes fade-up-s { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+@keyframes zoom-s { from { transform: scale(1.12); } to { transform: scale(1); } }
+.dot { width: 10px; height: 10px; border-radius: 99px; background: #bbe3c6; transition: all .3s; }
+.dot.aktif { width: 32px; background: #297b4a; }
+/* Kartu produk */
+.kartu { transition: transform .3s cubic-bezier(.2,.8,.2,1), box-shadow .3s; }
+.kartu:hover { transform: translateY(-6px); box-shadow: 0 18px 40px -16px rgba(23,63,42,.35); }
+.kartu img { transition: transform .6s ease; } .kartu:hover img { transform: scale(1.07); }
+.fav-aktif { color: #e11d48; } .fav-aktif svg { fill: currentColor; }
+.denyut { animation: denyut .35s ease; } @keyframes denyut { 50% { transform: scale(1.35); } }

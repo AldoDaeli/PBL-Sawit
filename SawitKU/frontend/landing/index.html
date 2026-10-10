@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- 'unsafe-eval' hanya dibutuhkan Tailwind CDN. Hapus saat produksi (build Tailwind CLI). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="no-referrer">
+<title>SawitKu | Toko Online</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="/shared/tailwind.js"></script>
+<link rel="stylesheet" href="/landing/style.css">
+</head>
+<body class="font-sans bg-white text-slate-800 antialiased">
+
+<div class="bg-brand-900 text-brand-100 text-xs">
+  <div class="max-w-7xl mx-auto px-4 py-2 flex justify-center md:justify-between gap-6 flex-wrap">
+    <span class="flex items-center gap-2" id="strip-1"></span><span class="hidden md:flex items-center gap-2" id="strip-2"></span><span class="hidden md:flex items-center gap-2" id="strip-3"></span>
+  </div>
+</div>
+
+<header class="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-100">
+  <div class="max-w-7xl mx-auto px-4 h-20 flex items-center gap-4">
+    <a href="#beranda" class="flex items-center gap-2 text-2xl font-extrabold text-brand-700"><span class="w-10 h-10 rounded-xl bg-brand-600 text-white grid place-items-center" id="logo-ikon"></span>Sawit<span class="text-sun-500">Ku</span></a>
+    <form id="form-cari" class="flex-1 hidden md:flex max-w-xl mx-auto" role="search">
+      <input id="cari" type="search" maxlength="60" placeholder="Cari monstera, kaktus, pot..." aria-label="Cari produk" class="w-full h-11 pl-4 pr-2 rounded-l-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-400 text-sm">
+      <button class="h-11 px-4 bg-brand-600 hover:bg-brand-700 text-white rounded-r-xl transition" aria-label="Cari" id="btn-cari"></button>
+    </form>
+    <div class="ml-auto flex items-center gap-2">
+      <a id="btn-fav" href="/dashboard#favorit" class="relative w-11 h-11 grid place-items-center rounded-xl hover:bg-brand-50 text-slate-600" aria-label="Favorit"></a>
+      <a id="btn-cart" href="/dashboard#keranjang" class="relative w-11 h-11 grid place-items-center rounded-xl bg-sun-400 hover:bg-sun-500 text-brand-900 transition" aria-label="Keranjang"><span id="ikon-cart"></span><span id="badge-cart" class="hidden absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-brand-700 text-white text-[11px] font-bold grid place-items-center">0</span></a>
+      <div id="area-auth"></div>
+      <button id="btn-menu" class="md:hidden w-11 h-11 grid place-items-center rounded-xl hover:bg-brand-50" aria-label="Menu"></button>
+    </div>
+  </div>
+  <nav class="bg-brand-600 text-white">
+    <div class="max-w-7xl mx-auto px-4 flex items-center h-14 gap-2">
+      <div class="relative">
+        <button id="btn-kat" class="h-14 px-4 bg-brand-800 hover:bg-brand-900 flex items-center gap-2 font-semibold text-sm transition" aria-expanded="false"><span id="ikon-kat"></span>Kategori</button>
+        <ul id="menu-kat" class="hidden absolute left-0 top-full w-60 bg-white text-slate-700 rounded-b-xl shadow-xl py-2 animate-pop"></ul>
+      </div>
+      <div id="nav-link" class="hidden md:flex items-center text-sm font-semibold">
+        <a href="#beranda" class="px-4 py-4 hover:bg-brand-700 transition">Beranda</a><a href="#terlaris" class="px-4 py-4 hover:bg-brand-700 transition">Terlaris</a><a href="#katalog" class="px-4 py-4 hover:bg-brand-700 transition">Katalog</a><a href="#kontak" class="px-4 py-4 hover:bg-brand-700 transition">Kontak</a>
+      </div>
+      <a id="kontak-wa" href="https://wa.me/6281234567890" target="_blank" rel="noopener noreferrer" class="ml-auto flex items-center gap-2 text-sm font-semibold pl-4 border-l border-brand-500 h-14" aria-label="Chat WhatsApp SawitKu"><span id="ikon-tel"></span><span class="leading-tight"><span class="block text-[11px] text-brand-100 font-normal">Chat WhatsApp</span><span id="kontak-wa-teks">+62 812-3456-7890</span></span></a>
+    </div>
+    <div id="nav-mobile" class="hidden md:hidden bg-brand-700 px-4 pb-3 text-sm font-semibold"><a class="block py-2" href="#beranda">Beranda</a><a class="block py-2" href="#terlaris">Terlaris</a><a class="block py-2" href="#katalog">Katalog</a><a class="block py-2" href="#kontak">Kontak</a></div>
+  </nav>
+</header>
+
+<main>
+<section id="beranda" class="max-w-7xl mx-auto px-4 pt-8 grid lg:grid-cols-3 gap-5">
+  <div class="lg:col-span-2 relative overflow-hidden rounded-3xl bg-brand-50 min-h-[380px]" id="slider" aria-roledescription="carousel"></div>
+  <div class="grid sm:grid-cols-2 lg:grid-cols-1 gap-5" id="side-cards"></div>
+</section>
+
+<section class="max-w-7xl mx-auto px-4 mt-8 grid grid-cols-2 md:grid-cols-4 gap-4" id="fitur"></section>
+
+<section id="terlaris" class="max-w-7xl mx-auto px-4 mt-16">
+  <div data-reveal class="flex items-end justify-between mb-6"><div><p class="text-brand-600 font-bold text-sm tracking-wide uppercase">Pilihan Pelanggan</p><h2 class="text-3xl font-extrabold">Produk Terlaris</h2></div></div>
+  <div id="grid-terlaris" class="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6"></div>
+</section>
+
+<section id="katalog" class="max-w-7xl mx-auto px-4 mt-16">
+  <div data-reveal class="mb-6"><p class="text-brand-600 font-bold text-sm tracking-wide uppercase">Katalog</p><h2 class="text-3xl font-extrabold">Semua Produk</h2></div>
+  <div data-reveal class="flex flex-wrap gap-3 items-center bg-brand-50 rounded-2xl p-4 mb-6">
+    <select id="f-kat" class="h-10 rounded-xl border border-slate-200 px-3 text-sm bg-white" aria-label="Kategori"></select>
+    <select id="f-harga" class="h-10 rounded-xl border border-slate-200 px-3 text-sm bg-white" aria-label="Rentang harga"><option value="">Semua harga</option><option value="0-50000">Di bawah Rp50 rb</option><option value="50000-100000">Rp50 rb – 100 rb</option><option value="100000-200000">Rp100 rb – 200 rb</option><option value="200000-99999999">Di atas Rp200 rb</option></select>
+    <select id="f-rating" class="h-10 rounded-xl border border-slate-200 px-3 text-sm bg-white" aria-label="Rating minimal"><option value="0">Semua rating</option><option value="4.5">4.5 ke atas</option><option value="4">4.0 ke atas</option></select>
+    <select id="f-urut" class="h-10 rounded-xl border border-slate-200 px-3 text-sm bg-white" aria-label="Urutkan"><option value="populer">Terpopuler</option><option value="murah">Harga terendah</option><option value="mahal">Harga tertinggi</option><option value="rating">Rating tertinggi</option></select>
+    <button id="f-reset" class="h-10 px-4 rounded-xl text-sm font-semibold text-brand-700 hover:bg-white transition">Atur ulang</button>
+    <span id="jml-hasil" class="ml-auto text-sm text-slate-500"></span>
+  </div>
+  <div id="grid-katalog" class="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6"></div>
+</section>
+
+<section id="kontak" class="max-w-7xl mx-auto px-4 mt-20 mb-20">
+  <div data-reveal class="grid lg:grid-cols-2 rounded-3xl overflow-hidden bg-brand-800 text-white">
+    <div class="p-8 md:p-12 relative">
+      <p class="text-sun-400 font-bold text-sm tracking-wide uppercase">Hubungi Admin</p><h2 class="text-3xl font-extrabold mt-2">Ada keluhan, pertanyaan, atau ingin bermitra?</h2>
+      <p class="text-brand-100 mt-3">Tim kami membalas dalam 1x24 jam pada hari kerja.</p>
+      <ul class="mt-8 space-y-4 text-brand-100" id="info-kontak"></ul>
+    </div>
+    <form id="form-kontak" class="bg-white text-slate-800 p-8 md:p-12 space-y-4" novalidate>
+      <div><label class="text-sm font-semibold" for="k-nama">Nama</label><input id="k-nama" maxlength="50" autocomplete="name" class="mt-1 w-full h-11 rounded-xl border border-slate-200 px-3 focus:outline-none focus:ring-2 focus:ring-brand-400"></div>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div><label class="text-sm font-semibold" for="k-email">Email</label><input id="k-email" type="email" maxlength="100" autocomplete="email" class="mt-1 w-full h-11 rounded-xl border border-slate-200 px-3 focus:outline-none focus:ring-2 focus:ring-brand-400"></div>
+        <div><label class="text-sm font-semibold" for="k-jenis">Keperluan</label><select id="k-jenis" class="mt-1 w-full h-11 rounded-xl border border-slate-200 px-3 bg-white"><option>Pertanyaan</option><option>Keluhan</option><option>Kerja sama</option></select></div>
+      </div>
+      <div><label class="text-sm font-semibold" for="k-isi">Pesan</label><textarea id="k-isi" rows="4" maxlength="500" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400"></textarea></div>
+      <p id="k-err" class="text-sm text-rose-600 min-h-5" role="alert"></p>
+      <button class="w-full h-12 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold transition active:scale-[.98]">Kirim Pesan</button>
+    </form>
+  </div>
+</section>
+</main>
+
+<footer class="bg-brand-900 text-brand-200 text-sm"><div class="max-w-7xl mx-auto px-4 py-8 flex flex-wrap justify-between gap-3"><span>&copy; 2026 SawitKu. PBL RKS Tim 304.</span><span>Tanaman sehat, rumah hangat.</span></div></footer>
+
+<script src="/shared/core.js"></script><script src="/shared/chat.js"></script>
+<script src="/landing/script.js"></script>
+</body>
+</html>
