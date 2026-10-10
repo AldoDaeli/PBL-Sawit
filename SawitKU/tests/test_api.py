@@ -1,0 +1,742 @@
+"""Uji alur bisnis end-to-end. Memakai SQLite dengan schema.sql yang sama (tanpa opsi khusus MariaDB).
+Jalankan: python -m unittest discover -s tests -v"""
+import base64, io, os, re, shutil, sqlite3, tempfile, unittest
+from PIL import Image
+
+os.environ.setdefault('DB_PASSWORD', 'x')
+from app import create_app, db as dbmod, seed, otp
+from app.db import Db
+
+ROOT = os.path.dirname(os.path.dirname(__file__))
+TMP = tempfile.mkdtemp()
+TEMPLATE = os.path.join(TMP, 'template.db')
+
+
+# ---- adapter SQLite: meniru antarmuka PyMySQL (%s -> ?, FOR UPDATE dibuang, baris = dict) ----
+class _Cur:
+    def __init__(self, c): self.c = c
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+    def execute(self, sql, args=()):
+        self.c.execute(re.sub(r'\s+FOR UPDATE', '', sql).replace('%s', '?'), tuple(args)); return self
+    def fetchall(self): return [dict(r) for r in self.c.fetchall()]
+    @property
+    def lastrowid(self): return self.c.lastrowid
+    @property
+    def rowcount(self): return self.c.rowcount
+
+class _Conn:
+    def __init__(self, path):
+        self.c = sqlite3.connect(path); self.c.row_factory = sqlite3.Row
+        self.c.execute('PRAGMA foreign_keys=ON')
+    def cursor(self): return _Cur(self.c.cursor())
+    def commit(self): self.c.commit()
+    def rollback(self): self.c.rollback()
+    def close(self): self.c.close()
+
+def sqlite_db(path): return Db(_Conn(path))
+
+def _schema():
+    with open(os.path.join(ROOT, 'schema.sql'), encoding='utf-8') as f: t = f.read()
+    t = '\n'.join(l for l in t.splitlines() if not l.strip().startswith('--'))
+    t = re.sub(r'\)\s*ENGINE=[^;]*;', ');', t)
+    t = re.sub(r'INT NOT NULL AUTO_INCREMENT PRIMARY KEY', 'INTEGER PRIMARY KEY AUTOINCREMENT', t)
+    return t
+
+def setUpModule():
+    d = sqlite_db(TEMPLATE)
+    for s in _schema().split(';'):
+        if s.strip(): d.run(s)
+    d.commit(); seed.jalankan(d, riwayat=False); d.close()
+
+def tearDownModule(): shutil.rmtree(TMP, ignore_errors=True)
+
+
+ALAMAT = {'penerima': 'Budi Santoso', 'telepon': '081234567801', 'alamat': 'Jl. Merdeka No. 12, RT 03/RW 05', 'kota': 'Kota Bandung', 'kodePos': '40162'}
+
+def png_url(w=40, h=30, fmt='PNG'):
+    b = io.BytesIO(); Image.new('RGB', (w, h), 'green').save(b, fmt)
+    return f"data:image/{fmt.lower()};base64," + base64.b64encode(b.getvalue()).decode()
+
+
+class Dasar(unittest.TestCase):
+    def setUp(self):
+        self.dbfile = os.path.join(TMP, self.id() + '.db'); shutil.copy(TEMPLATE, self.dbfile)
+        self.up = os.path.join(TMP, 'up_' + self.id())
+        self.app = create_app({'TESTING': True, 'UPLOAD_DIR': self.up, 'SWEEP_INTERVAL_MS': 0, 'CORS_ORIGINS': ['http://front.test']})
+        self._orig = dbmod.connect
+        dbmod.connect = lambda: sqlite_db(self.dbfile)
+        self.c = self.app.test_client()
+        self.kode = {}                                  # email -> kode OTP terakhir (email asli tidak dikirim saat tes)
+        self._kirim = otp.kirim_kode
+        otp.kirim_kode = lambda email, username, kode, **k: self.kode.__setitem__(email, kode)
+
+    def tearDown(self):
+        dbmod.connect = self._orig; otp.kirim_kode = self._kirim
+
+    def daftar_penuh(self, username, email, pw):
+        """Daftar + verifikasi OTP; kembalikan status verifikasi."""
+        s, j = self.req('POST', '/auth/daftar', {'username': username, 'email': email, 'password': pw}); self.assertEqual(s, 200, j)
+        return self.req('POST', '/auth/daftar/verifikasi', {'email': email.lower(), 'kode': self.kode[email.lower()]})[0]
+
+    def req(self, m, path, json=None, tok=None, **kw):
+        h = {'Authorization': f'Bearer {tok}'} if tok else {}
+        r = self.c.open('/api' + path, method=m, json=json, headers=h, **kw)
+        return r.status_code, r.get_json()
+
+    def login(self, u, pw):
+        s, j = self.req('POST', '/auth/masuk', {'username': u, 'password': pw}); self.assertEqual(s, 200, j); return j['data']['token']
+
+    def sql(self, q, a=()):
+        d = sqlite_db(self.dbfile); r = d.all(q, a) if q.strip().upper().startswith('SELECT') else d.run(q, a); d.commit(); d.close(); return r
+
+    def stok(self, pid): return self.sql('SELECT stok FROM produk WHERE id=%s', (pid,))[0]['stok']
+
+    def beli(self, tok, pid=3, qty=2):
+        self.assertEqual(self.req('POST', '/keranjang', {'produkId': pid, 'qty': qty}, tok)[0], 201)
+        s, j = self.req('POST', '/checkout', ALAMAT, tok); self.assertEqual(s, 201, j); return j['data']
+
+
+class TestAuth(Dasar):
+    def test_kesehatan_dan_katalog(self):
+        self.assertEqual(self.req('GET', '/kesehatan')[0], 200)
+        s, j = self.req('GET', '/produk'); self.assertEqual(len(j['data']), 12)
+        p = j['data'][0]; self.assertEqual(p['nama'], 'Monstera Deliciosa'); self.assertIs(p['bestSeller'], True)
+        self.assertEqual(p['spesifikasi']['Pot'], 'Plastik 20 cm'); self.assertIsInstance(p['rating'], float)
+        self.assertEqual(self.req('GET', '/produk/999')[0], 404)
+
+    def test_daftar_validasi_dan_duplikat(self):
+        base = {'username': 'tono_1', 'email': 'tono@mail.com', 'password': 'Rahasia123'}
+        for k, v in (('username', 'a b'), ('email', 'bukan-email'), ('password', 'pendekk')):
+            s, j = self.req('POST', '/auth/daftar', {**base, k: v}); self.assertEqual(s, 400, k)
+        self.assertEqual(self.daftar_penuh('tono_1', 'tono@mail.com', 'Rahasia123'), 201)
+        self.assertEqual(self.req('POST', '/auth/daftar', {**base, 'email': 'lain@mail.com', 'username': 'TONO_1'})[0], 409)
+        self.assertEqual(self.req('POST', '/auth/daftar', {**base, 'username': 'tono_2'})[0], 409)
+        self.login('tono_1', 'Rahasia123')
+        h = self.sql('SELECT hash FROM pengguna WHERE username=%s', ('tono_1',))[0]['hash']
+        self.assertNotIn('Rahasia123', h); self.assertTrue(h.startswith(('scrypt:', 'pbkdf2:')))
+
+    def test_otp_akun_belum_dibuat_sebelum_verifikasi(self):
+        s, j = self.req('POST', '/auth/daftar', {'username': 'tono_1', 'email': 'Tono@Mail.com', 'password': 'Rahasia123'})
+        self.assertEqual((s, j['data']['email']), (200, 'tono@mail.com'))
+        self.assertRegex(self.kode['tono@mail.com'], r'^\d{6}$')
+        self.assertEqual(self.sql('SELECT COUNT(*) AS n FROM pengguna WHERE username=%s', ('tono_1',))[0]['n'], 0)
+        self.assertEqual(self.req('POST', '/auth/masuk', {'username': 'tono_1', 'password': 'Rahasia123'})[0], 401)
+        row = self.sql('SELECT * FROM otp_daftar WHERE email=%s', ('tono@mail.com',))[0]
+        self.assertNotIn(self.kode['tono@mail.com'], str(row)); self.assertNotIn('Rahasia123', str(row))   # kode & password tidak tersimpan polos
+        self.assertEqual(self.req('POST', '/auth/daftar/verifikasi', {'email': 'tono@mail.com', 'kode': self.kode['tono@mail.com']})[0], 201)
+        self.assertEqual(self.sql('SELECT COUNT(*) AS n FROM otp_daftar')[0]['n'], 0)       # pendaftaran tertunda dibersihkan
+        self.login('tono_1', 'Rahasia123')
+        self.assertEqual(self.sql('SELECT peran FROM pengguna WHERE username=%s', ('tono_1',))[0]['peran'], 'customer')
+
+    def test_otp_salah_kedaluwarsa_dan_batas_percobaan(self):
+        self.req('POST', '/auth/daftar', {'username': 'tono_1', 'email': 'tono@mail.com', 'password': 'Rahasia123'})
+        benar = self.kode['tono@mail.com']; salah = '000000' if benar != '000000' else '111111'
+        v = lambda k: self.req('POST', '/auth/daftar/verifikasi', {'email': 'tono@mail.com', 'kode': k})
+        self.assertEqual(v('12ab')[0], 400)                                   # format
+        s, j = v(salah); self.assertEqual(s, 400); self.assertIn('Sisa percobaan: 4', j['error'])
+        for _ in range(4): v(salah)
+        self.assertEqual(v(benar)[0], 429)                                    # 5 salah -> kode benar pun ditolak sampai kirim ulang
+        self.sql('UPDATE otp_daftar SET salah=0, kedaluwarsa=1')              # kedaluwarsa
+        s, j = v(benar); self.assertEqual(s, 400); self.assertIn('kedaluwarsa', j['error'])
+        self.assertEqual(self.req('POST', '/auth/daftar/verifikasi', {'email': 'tidak@ada.com', 'kode': benar})[0], 404)
+
+    def test_otp_kirim_ulang_jeda_dan_kode_lama_hangus(self):
+        self.req('POST', '/auth/daftar', {'username': 'tono_1', 'email': 'tono@mail.com', 'password': 'Rahasia123'})
+        lama = self.kode['tono@mail.com']
+        s, j = self.req('POST', '/auth/daftar/kirim-ulang', {'email': 'tono@mail.com'}); self.assertEqual(s, 429); self.assertIn('detik', j['error'])
+        s, j = self.req('POST', '/auth/daftar', {'username': 'tono_1', 'email': 'tono@mail.com', 'password': 'Rahasia123'}); self.assertEqual(s, 429)
+        self.sql('UPDATE otp_daftar SET kirim_terakhir=1')                    # lewati jeda
+        self.assertEqual(self.req('POST', '/auth/daftar/kirim-ulang', {'email': 'tono@mail.com'})[0], 200)
+        baru = self.kode['tono@mail.com']
+        if baru != lama:                                                      # kode lama tidak berlaku lagi
+            self.assertEqual(self.req('POST', '/auth/daftar/verifikasi', {'email': 'tono@mail.com', 'kode': lama})[0], 400)
+        self.assertEqual(self.req('POST', '/auth/daftar/verifikasi', {'email': 'tono@mail.com', 'kode': baru})[0], 201)
+        self.assertEqual(self.req('POST', '/auth/daftar/kirim-ulang', {'email': 'tono@mail.com'})[0], 404)   # sudah jadi akun
+        self.app.config['OTP_MAKS_KIRIM'] = 2                                 # batas jumlah kirim per pendaftaran
+        self.req('POST', '/auth/daftar', {'username': 'tini_1', 'email': 'tini@mail.com', 'password': 'Rahasia123'})
+        self.sql('UPDATE otp_daftar SET kirim_terakhir=1'); self.assertEqual(self.req('POST', '/auth/daftar/kirim-ulang', {'email': 'tini@mail.com'})[0], 200)
+        self.sql('UPDATE otp_daftar SET kirim_terakhir=1'); self.assertEqual(self.req('POST', '/auth/daftar/kirim-ulang', {'email': 'tini@mail.com'})[0], 429)
+
+    def test_otp_gagal_kirim_email_tidak_menyimpan_pendaftaran(self):
+        from app.errors import ApiError
+        def gagal(*a): raise ApiError('Gagal mengirim email kode OTP.', 502)
+        otp.kirim_kode = gagal
+        self.assertEqual(self.req('POST', '/auth/daftar', {'username': 'tono_1', 'email': 'tono@mail.com', 'password': 'Rahasia123'})[0], 502)
+        self.assertEqual(self.sql('SELECT COUNT(*) AS n FROM otp_daftar')[0]['n'], 0)
+
+    def test_login_salah_diblokir_setelah_5_kali(self):
+        for _ in range(5):
+            s, j = self.req('POST', '/auth/masuk', {'username': 'budi_santoso', 'password': 'salah123'}); self.assertEqual(s, 401)
+        s, j = self.req('POST', '/auth/masuk', {'username': 'budi_santoso', 'password': 'Budi12345'})
+        self.assertEqual(s, 429); self.assertIn('menit', j['error'])
+
+    def test_pesan_galat_login_seragam(self):
+        a = self.req('POST', '/auth/masuk', {'username': 'budi_santoso', 'password': 'x'})[1]['error']
+        b = self.req('POST', '/auth/masuk', {'username': 'tidak_ada', 'password': 'x'})[1]['error']
+        self.assertEqual(a, b)
+
+    def test_rbac_dan_token(self):
+        self.assertEqual(self.req('GET', '/keranjang')[0], 401)
+        self.assertEqual(self.req('GET', '/keranjang', tok='ngawur')[0], 401)
+        budi, adm = self.login('budi_santoso', 'Budi12345'), self.login('admin', 'Admin12345')
+        self.assertEqual(self.req('GET', '/admin/pesanan', tok=budi)[0], 403)
+        self.assertEqual(self.req('POST', '/admin/produk', {}, tok=budi)[0], 403)
+        self.assertEqual(self.req('GET', '/keranjang', tok=adm)[0], 403)      # admin bukan customer
+        self.assertEqual(self.req('GET', '/admin/pesanan', tok=adm)[0], 200)
+        self.assertEqual(self.req('GET', '/auth/saya', tok=budi)[1]['data']['username'], 'budi_santoso')
+        self.assertNotIn('hash', self.req('GET', '/auth/saya', tok=budi)[1]['data'])
+
+    def test_logout_dan_sesi_kedaluwarsa(self):
+        t = self.login('budi_santoso', 'Budi12345')
+        self.assertEqual(self.req('POST', '/auth/keluar', tok=t)[0], 200)
+        self.assertEqual(self.req('GET', '/auth/saya', tok=t)[0], 401)
+        t2 = self.login('budi_santoso', 'Budi12345')
+        self.sql('UPDATE sesi SET kedaluwarsa=1'); self.assertEqual(self.req('GET', '/auth/saya', tok=t2)[0], 401)
+
+    def test_cors(self):
+        r = self.c.get('/api/produk', headers={'Origin': 'http://front.test'})
+        self.assertEqual(r.headers['Access-Control-Allow-Origin'], 'http://front.test')
+        r = self.c.get('/api/produk', headers={'Origin': 'http://jahat.test'})
+        self.assertNotIn('Access-Control-Allow-Origin', r.headers)
+
+
+class TestPesanan(Dasar):
+    def test_keranjang_dan_stok(self):
+        t = self.login('budi_santoso', 'Budi12345')
+        self.assertEqual(self.req('POST', '/keranjang', {'produkId': 3, 'qty': 41}, t)[0], 409)     # stok 40
+        self.assertEqual(self.req('POST', '/keranjang', {'produkId': 3, 'qty': 0}, t)[0], 400)
+        self.assertEqual(self.req('POST', '/keranjang', {'produkId': 999, 'qty': 1}, t)[0], 400)
+        self.assertEqual(self.req('POST', '/keranjang', {'produkId': 3, 'qty': 30}, t)[0], 201)
+        self.assertEqual(self.req('POST', '/keranjang', {'produkId': 3, 'qty': 11}, t)[0], 409)     # 30+11 > 40
+        self.assertEqual(self.req('PUT', '/keranjang/3', {'qty': 5}, t)[0], 200)
+        k = self.req('GET', '/keranjang', tok=t)[1]['data']; self.assertEqual((k[0]['qty'], k[0]['p']['nama']), (5, 'Kaktus Mini Set 3'))
+        self.assertEqual(self.req('DELETE', '/keranjang/3', tok=t)[0], 200)
+        self.assertEqual(self.req('GET', '/keranjang', tok=t)[1]['data'], [])
+        self.assertEqual(self.req('POST', '/checkout', ALAMAT, t)[0], 400)                              # keranjang kosong
+
+    def test_checkout_hitung_server_kurangi_stok_kosongkan_keranjang(self):
+        t = self.login('budi_santoso', 'Budi12345'); sebelum = self.stok(3)
+        self.req('POST', '/keranjang', {'produkId': 3, 'qty': 2}, t); self.req('POST', '/keranjang', {'produkId': 12, 'qty': 1}, t)
+        s, j = self.req('POST', '/checkout', {**ALAMAT, 'total': 1, 'harga': 1}, t)                            # nilai dari klien diabaikan
+        o = j['data']; self.assertEqual((s, o['total'], o['status']), (201, 2 * 60000 + 30000, 'menunggu_bayar'))
+        self.assertEqual(len(o['items']), 2); self.assertEqual(self.stok(3), sebelum - 2)
+        self.assertEqual(self.req('GET', '/keranjang', tok=t)[1]['data'], [])
+        self.assertGreater(o['batasBayar'], o['dibuat'])
+
+    def test_pesanan_hanya_milik_sendiri(self):
+        budi, siti = self.login('budi_santoso', 'Budi12345'), self.login('siti_aulia', 'Siti12345')
+        o = self.beli(budi)
+        self.assertEqual(self.req('POST', f"/pesanan/{o['id']}/batal", tok=siti)[0], 404)
+        self.assertEqual(self.req('POST', f"/pesanan/{o['id']}/bayar", {'bukti': png_url()}, siti)[0], 404)
+        ids = [x['id'] for x in self.req('GET', '/pesanan/saya', tok=siti)[1]['data']]; self.assertNotIn(o['id'], ids)
+
+    def test_batal_kembalikan_stok(self):
+        t = self.login('budi_santoso', 'Budi12345'); awal = self.stok(3)
+        o = self.beli(t); self.assertEqual(self.stok(3), awal - 2)
+        self.assertEqual(self.req('POST', f"/pesanan/{o['id']}/batal", tok=t)[0], 200)
+        self.assertEqual(self.stok(3), awal)
+        self.assertEqual(self.req('POST', f"/pesanan/{o['id']}/batal", tok=t)[0], 409)               # tidak bisa dua kali
+
+    def test_bukti_bayar_validasi_dan_penyimpanan(self):
+        t = self.login('budi_santoso', 'Budi12345'); o = self.beli(t); url = f"/pesanan/{o['id']}/bayar"
+        palsu = 'data:image/png;base64,' + base64.b64encode(b'<?php echo 1; ?>' * 50).decode()
+        self.assertEqual(self.req('POST', url, {'bukti': palsu}, t)[0], 400)                         # magic bytes salah
+        self.assertEqual(self.req('POST', url, {'bukti': 'data:text/html;base64,PGI+'}, t)[0], 400)
+        self.assertEqual(self.req('POST', url, {'bukti': 'https://x.com/a.png'}, t)[0], 400)         # bukti wajib unggahan
+        besar = 'data:image/png;base64,' + base64.b64encode(b'\x89PNG\r\n\x1a\n' + b'0' * 3_000_000).decode()
+        self.assertEqual(self.req('POST', url, {'bukti': besar}, t)[0], 400)
+        self.assertEqual(self.req('POST', url, {'bukti': png_url(fmt='WEBP')}, t)[0], 200)
+        o2 = [x for x in self.req('GET', '/pesanan/saya', tok=t)[1]['data'] if x['id'] == o['id']][0]
+        self.assertEqual(o2['status'], 'menunggu_verifikasi')
+        self.assertRegex(o2['bukti'], r'^/media/bukti/[0-9a-f]{32}\.jpg$')
+        berkas = os.path.join(self.up, 'bukti', o2['bukti'].rsplit('/', 1)[1])
+        with Image.open(berkas) as im: self.assertEqual(im.format, 'JPEG')                                          # digambar ulang -> JPEG bersih
+        r = self.c.get(o2['bukti']); self.assertEqual(r.status_code, 200); r.close()
+        self.assertEqual(self.req('POST', url, {'bukti': png_url()}, t)[0], 409)                     # sudah dibayar
+
+    def test_media_tolak_path_traversal(self):
+        self.assertEqual(self.c.get('/media/bukti/..%2F..%2Fetc%2Fpasswd').status_code, 404)
+        self.assertEqual(self.c.get('/media/produk/abc.jpg').status_code, 404)
+
+    def test_alur_penuh_verifikasi_kirim_terima_ulasan(self):
+        budi, adm = self.login('budi_santoso', 'Budi12345'), self.login('admin', 'Admin12345')
+        terjual = self.sql('SELECT terjual FROM produk WHERE id=3')[0]['terjual']
+        o = self.beli(budi); oid = o['id']
+        self.assertEqual(self.req('POST', f'/admin/pesanan/{oid}/verifikasi', {'setuju': True}, adm)[0], 409)   # belum bayar
+        self.assertEqual(self.req('POST', '/ulasan', {'produkId': 3, 'rating': 5, 'teks': 'Bagus sekali!'}, budi)[0], 403)  # belum diterima
+        self.req('POST', f'/pesanan/{oid}/bayar', {'bukti': png_url()}, budi)
+        self.assertEqual(self.req('POST', f'/admin/pesanan/{oid}/kirim', tok=adm)[0], 409)
+        self.assertEqual(self.req('POST', f'/admin/pesanan/{oid}/verifikasi', {'setuju': True}, adm)[0], 200)
+        self.assertEqual(self.sql('SELECT terjual FROM produk WHERE id=3')[0]['terjual'], terjual + 2)
+        self.assertEqual(self.req('POST', f'/pesanan/{oid}/terima', tok=budi)[0], 409)                         # belum dikirim
+        self.assertEqual(self.req('POST', f'/admin/pesanan/{oid}/kirim', tok=adm)[0], 200)
+        self.assertEqual(self.req('POST', f'/pesanan/{oid}/terima', tok=budi)[0], 200)
+        self.assertEqual(self.req('POST', '/ulasan', {'produkId': 3, 'rating': 4, 'teks': 'Bagus sekali!'}, budi)[0], 201)  # kini boleh
+        self.assertEqual(self.req('POST', '/ulasan', {'produkId': 3, 'rating': 4, 'teks': 'Bagus sekali!'}, budi)[0], 409)
+        adm_list = self.req('GET', '/admin/pesanan', tok=adm)[1]['data']
+        self.assertEqual([x for x in adm_list if x['id'] == oid][0]['pembeli'], 'budi_santoso')
+
+    def test_ulasan_aturan(self):
+        siti, adm = self.login('siti_aulia', 'Siti12345'), self.login('admin', 'Admin12345')
+        # siti belum pernah menerima produk 9 -> ditolak
+        self.assertEqual(self.req('POST', '/ulasan', {'produkId': 9, 'rating': 5, 'teks': 'Bagus sekali!'}, siti)[0], 403)
+        # siti sudah menerima produk 1? (pesanan 'dikirim' belum selesai) -> ditolak; produk 2 (selesai) sudah dibeli -> boleh
+        self.assertEqual(self.req('POST', '/ulasan', {'produkId': 1, 'rating': 5, 'teks': 'Bagus sekali!'}, siti)[0], 403)
+        self.assertEqual(self.req('POST', '/ulasan', {'produkId': 2, 'rating': 9, 'teks': 'Bagus sekali!'}, siti)[0], 400)
+        self.assertEqual(self.req('POST', '/ulasan', {'produkId': 2, 'rating': 4, 'teks': 'ok'}, siti)[0], 400)
+        s, j = self.req('POST', '/ulasan', {'produkId': 2, 'rating': 3, 'teks': 'Cukup bagus untuk pemula.'}, siti); self.assertEqual(s, 201, j)
+        self.assertEqual(self.req('POST', '/ulasan', {'produkId': 2, 'rating': 3, 'teks': 'Cukup bagus untuk pemula.'}, siti)[0], 409)
+        self.assertTrue(self.req('GET', '/ulasan/sudah/2', tok=siti)[1]['data']['sudah'])
+        self.assertAlmostEqual(self.req('GET', '/produk/2')[1]['data']['rating'], 4.0)                       # rata-rata (5 dan 3)
+        rid = [r for r in self.req('GET', '/produk/2/ulasan')[1]['data'] if r['nama'] == 'siti_aulia'][0]['id']
+        self.assertEqual(self.req('POST', f'/admin/ulasan/{rid}/balas', {'teks': 'ab'}, adm)[0], 400)
+        self.assertEqual(self.req('POST', f'/admin/ulasan/{rid}/balas', {'teks': 'Terima kasih!'}, adm)[0], 200)
+        u = [r for r in self.req('GET', '/admin/ulasan', tok=adm)[1]['data'] if r['id'] == rid][0]
+        self.assertEqual((u['balasan']['teks'], u['produk']), ('Terima kasih!', 'Sansevieria Trifasciata'))
+        self.assertEqual(self.req('POST', f'/admin/ulasan/{rid}/balas', {'teks': 'Terima kasih!'}, siti)[0], 403)
+
+    def test_verifikasi_tolak_kembalikan_stok(self):
+        t, adm = self.login('budi_santoso', 'Budi12345'), self.login('admin', 'Admin12345'); awal = self.stok(3)
+        o = self.beli(t); self.req('POST', f"/pesanan/{o['id']}/bayar", {'bukti': png_url()}, t)
+        s, _ = self.req('POST', f"/admin/pesanan/{o['id']}/verifikasi", {'setuju': False, 'alasan': 'Nominal kurang'}, adm); self.assertEqual(s, 200)
+        x = [p for p in self.req('GET', '/pesanan/saya', tok=t)[1]['data'] if p['id'] == o['id']][0]
+        self.assertEqual((x['status'], x['alasan']), ('dibatalkan', 'Nominal kurang')); self.assertEqual(self.stok(3), awal)
+
+    def test_pesanan_kedaluwarsa_dibatalkan_otomatis(self):
+        t = self.login('budi_santoso', 'Budi12345'); awal = self.stok(3); o = self.beli(t)
+        self.sql('UPDATE pesanan SET batas_bayar=1 WHERE id=%s', (o['id'],))
+        self.req('GET', '/produk')                                                                    # sapu dipicu dari katalog
+        x = [p for p in self.req('GET', '/pesanan/saya', tok=t)[1]['data'] if p['id'] == o['id']][0]
+        self.assertEqual((x['status'], x['alasan']), ('dibatalkan', 'Melewati batas waktu pembayaran.')); self.assertEqual(self.stok(3), awal)
+
+    def test_stok_habis_ditolak_saat_checkout_kedua(self):
+        budi, siti = self.login('budi_santoso', 'Budi12345'), self.login('siti_aulia', 'Siti12345')
+        self.sql('UPDATE produk SET stok=3 WHERE id=3')
+        self.req('POST', '/keranjang', {'produkId': 3, 'qty': 3}, budi); self.req('POST', '/keranjang', {'produkId': 3, 'qty': 3}, siti)
+        self.assertEqual(self.req('POST', '/checkout', ALAMAT, budi)[0], 201)
+        s, j = self.req('POST', '/checkout', ALAMAT, siti); self.assertEqual(s, 409); self.assertIn('Stok', j['error'])
+        self.assertEqual(self.stok(3), 0)
+
+
+class TestAdmin(Dasar):
+    def prod(self, **k):
+        return {'nama': 'Ficus Lyrata', 'kategori': 'Tanaman Hias Daun', 'harga': 150000, 'stok': 10,
+                'gambar': 'https://loremflickr.com/640/640/ficus?lock=1', 'deskripsi': 'Daun besar.',
+                'spek': 'Tinggi: 50 cm\nCahaya = Terang\n\n', 'bestSeller': True, **k}
+
+    def test_crud_produk_dan_validasi(self):
+        adm = self.login('admin', 'Admin12345')
+        for k, v in (('nama', 'ab'), ('kategori', 'Ngawur'), ('harga', 5), ('harga', 'abc'), ('stok', -1), ('gambar', 'http://x.com/a.png'), ('gambar', 'javascript:alert(1)')):
+            self.assertEqual(self.req('POST', '/admin/produk', self.prod(**{k: v}), adm)[0], 400, (k, v))
+        s, j = self.req('POST', '/admin/produk', self.prod(), adm); p = j['data']
+        self.assertEqual((s, p['spesifikasi'], p['terjual'], p['rating']), (201, {'Tinggi': '50 cm', 'Cahaya': 'Terang'}, 0, 4.5))
+        s, j = self.req('PUT', f"/admin/produk/{p['id']}", self.prod(harga=175000, stok=7, gambar=p['gambar']), adm)
+        self.assertEqual((s, j['data']['harga'], j['data']['stok']), (200, 175000, 7))
+        self.assertEqual(self.req('PUT', '/admin/produk/999', self.prod(), adm)[0], 404)
+        for salah in ('Tinggi 40 cm', 'Tinggi:', ': 40', 'A: 1\nbaris tanpa titik dua'):          # spesifikasi salah format ditolak dengan pesan, bukan dibuang diam-diam
+            s, j = self.req('POST', '/admin/produk', self.prod(spek=salah), adm); self.assertEqual(s, 400, salah); self.assertIn('Spesifikasi baris', j['error'])
+        self.assertEqual(self.req('POST', '/admin/produk', self.prod(spek='\n'.join(f'K{i}: v' for i in range(13))), adm)[0], 400)
+        self.assertEqual(self.req('DELETE', f"/admin/produk/{p['id']}", tok=adm)[0], 200)
+        self.assertEqual(self.req('GET', f"/produk/{p['id']}")[0], 404)
+
+    def test_unggah_foto_produk_dan_hapus_berkas_lama(self):
+        adm = self.login('admin', 'Admin12345')
+        s, j = self.req('POST', '/admin/produk', self.prod(gambar=png_url(2000, 1500)), adm); p = j['data']; self.assertEqual(s, 201)
+        f = os.path.join(self.up, 'produk', p['gambar'].rsplit('/', 1)[1]); self.assertTrue(os.path.exists(f))
+        with Image.open(f) as im: self.assertLessEqual(max(im.size), 1200)                                          # diperkecil
+        s, j = self.req('PUT', f"/admin/produk/{p['id']}", self.prod(gambar=p['gambar']), adm)        # URL milik sendiri dipertahankan
+        self.assertEqual(j['data']['gambar'], p['gambar']); self.assertTrue(os.path.exists(f))
+        self.req('PUT', f"/admin/produk/{p['id']}", self.prod(gambar=png_url()), adm)                 # ganti -> berkas lama terhapus
+        self.assertFalse(os.path.exists(f))
+
+    def test_hapus_produk_tidak_merusak_riwayat_pesanan(self):
+        adm, t = self.login('admin', 'Admin12345'), self.login('budi_santoso', 'Budi12345'); o = self.beli(t)
+        self.assertEqual(self.req('DELETE', '/admin/produk/3', tok=adm)[0], 200)
+        x = [p for p in self.req('GET', '/pesanan/saya', tok=t)[1]['data'] if p['id'] == o['id']][0]
+        self.assertEqual((x['items'][0]['nama'], x['items'][0]['produkId']), ('Kaktus Mini Set 3', None))
+
+    def test_nonaktifkan_pengguna(self):
+        adm, t = self.login('admin', 'Admin12345'), self.login('budi_santoso', 'Budi12345')
+        users = self.req('GET', '/admin/pengguna', tok=adm)[1]['data']; self.assertEqual({u['peran'] for u in users}, {'customer'})
+        self.assertEqual(self.req('POST', '/admin/pengguna/1/toggle', tok=adm)[0], 404)              # admin tak bisa diubah
+        self.assertEqual(self.req('POST', '/admin/pengguna/2/toggle', tok=adm)[1]['data'], {'aktif': False})
+        self.assertEqual(self.req('GET', '/auth/saya', tok=t)[0], 401)                               # sesi langsung putus
+        s, j = self.req('POST', '/auth/masuk', {'username': 'budi_santoso', 'password': 'Budi12345'}); self.assertEqual((s, j['error']), (403, 'Akun dinonaktifkan. Hubungi admin.'))
+        self.req('POST', '/admin/pengguna/2/toggle', tok=adm); self.login('budi_santoso', 'Budi12345')
+
+    def test_kontak_dan_favorit_dan_profil(self):
+        adm, t = self.login('admin', 'Admin12345'), self.login('budi_santoso', 'Budi12345')
+        m = {'nama': 'Tono', 'email': 'tono@mail.com', 'jenis': 'Pertanyaan', 'isi': 'Apakah ada pengiriman luar kota?'}
+        self.assertEqual(self.req('POST', '/kontak', {**m, 'jenis': 'Spam'})[0], 400)
+        self.assertEqual(self.req('POST', '/kontak', {**m, 'isi': 'pendek'})[0], 400)
+        self.assertEqual(self.req('POST', '/kontak', m)[0], 201)
+        self.assertEqual(self.req('GET', '/admin/kontak', tok=t)[0], 403)
+        self.assertEqual(self.req('GET', '/admin/kontak', tok=adm)[1]['data'][0]['nama'], 'Tono')
+        self.assertEqual(self.req('POST', '/favorit/5/toggle', tok=t)[1]['data'], {'aktif': True})
+        self.assertEqual(self.req('GET', '/favorit', tok=t)[1]['data'], [5])
+        self.assertEqual(self.req('POST', '/favorit/5/toggle', tok=t)[1]['data'], {'aktif': False})
+        self.assertEqual(self.req('PUT', '/profil', {'username': 'siti_aulia', 'email': 'budi@mail.com'}, t)[0], 409)
+        s, j = self.req('PUT', '/profil', {'username': 'budi_baru', 'email': 'budi@mail.com', 'foto': png_url()}, t)
+        self.assertEqual((s, j['data']['username']), (200, 'budi_baru')); self.assertRegex(j['data']['foto'], r'/media/foto/[0-9a-f]{32}\.jpg$')
+        s, j2 = self.req('PUT', '/profil', {'username': 'budi_baru', 'email': 'budi@mail.com', 'foto': j['data']['foto']}, t)
+        self.assertEqual(j2['data']['foto'], j['data']['foto'])
+
+    def test_galat_json_dan_body_rusak(self):
+        adm = self.login('admin', 'Admin12345')
+        r = self.c.post('/api/admin/produk', data='bukan json', headers={'Authorization': f'Bearer {adm}', 'Content-Type': 'application/json'})
+        self.assertEqual((r.status_code, r.get_json()['error']), (400, 'Format data tidak valid.'))
+        self.assertEqual(self.c.get('/api/tidak-ada').get_json(), {'error': 'Data tidak ditemukan.'})
+
+
+class TestKeamananTambahan(Dasar):
+    """Ganti email wajib OTP, OTP gagal tertutup tanpa SMTP, password seed acak, HSTS."""
+    def test_ganti_email_wajib_password_dan_otp(self):
+        tok = self.login('budi_santoso', 'Budi12345'); R = lambda m, p, j=None: self.req(m, p, j, tok=tok)
+        asli = self.sql('SELECT email FROM pengguna WHERE username=%s', ('budi_santoso',))[0]['email']
+        self.assertEqual(R('PUT', '/profil', {'username': 'budi_santoso', 'email': 'baru@mail.com'})[0], 400)       # tidak bisa lewat profil
+        self.assertEqual(R('PUT', '/profil', {'username': 'budi_santoso', 'email': asli.upper()})[0], 200)          # email sama (beda huruf) tetap boleh
+        s, j = R('POST', '/profil/email/minta', {'email': 'baru@mail.com', 'password': 'salahsalah1'}); self.assertEqual(s, 403)
+        self.assertEqual(R('POST', '/profil/email/minta', {'email': 'siti@mail.com', 'password': 'Budi12345'})[0], 409)   # dipakai orang lain
+        self.assertEqual(R('POST', '/profil/email/minta', {'email': 'bukan-email', 'password': 'Budi12345'})[0], 400)
+        s, j = R('POST', '/profil/email/minta', {'email': 'Baru@Mail.com', 'password': 'Budi12345'}); self.assertEqual((s, j['data']['email']), (200, 'baru@mail.com'))
+        self.assertEqual(self.sql('SELECT email FROM pengguna WHERE username=%s', ('budi_santoso',))[0]['email'], asli)      # belum berubah sebelum kode benar
+        kode = self.kode['baru@mail.com']; salah = '000000' if kode != '000000' else '111111'
+        s, j = R('POST', '/profil/email/verifikasi', {'kode': salah}); self.assertEqual(s, 400); self.assertIn('Sisa percobaan: 4', j['error'])
+        s, j = R('POST', '/profil/email/verifikasi', {'kode': kode}); self.assertEqual((s, j['data']['email']), (200, 'baru@mail.com'))
+        self.assertEqual(R('POST', '/profil/email/verifikasi', {'kode': kode})[0], 404)       # satu kali pakai
+
+    def test_ganti_email_kedaluwarsa_dan_jeda(self):
+        tok = self.login('budi_santoso', 'Budi12345'); R = lambda m, p, j=None: self.req(m, p, j, tok=tok)
+        R('POST', '/profil/email/minta', {'email': 'baru@mail.com', 'password': 'Budi12345'})
+        s, j = R('POST', '/profil/email/minta', {'email': 'baru@mail.com', 'password': 'Budi12345'}); self.assertEqual(s, 429)
+        self.sql('UPDATE otp_email SET kedaluwarsa=1')
+        s, j = R('POST', '/profil/email/verifikasi', {'kode': self.kode['baru@mail.com']}); self.assertEqual(s, 400); self.assertIn('kedaluwarsa', j['error'])
+
+    def test_ganti_email_butuh_login(self):
+        self.assertEqual(self.req('POST', '/profil/email/minta', {'email': 'a@b.com', 'password': 'x'})[0], 401)
+        self.assertEqual(self.req('POST', '/profil/email/verifikasi', {'kode': '123456'})[0], 401)
+
+    def test_otp_gagal_tertutup_tanpa_smtp(self):
+        otp.kirim_kode = self._kirim                         # pakai fungsi asli
+        self.app.config.update(SMTP_HOST='', OTP_CETAK_KODE=False)
+        s, j = self.req('POST', '/auth/daftar', {'username': 'tono_1', 'email': 'tono@mail.com', 'password': 'Rahasia123'})
+        self.assertEqual(s, 503); self.assertNotIn('kode', str(j).lower().replace('kode otp', ''))
+        self.assertEqual(self.sql('SELECT COUNT(*) AS n FROM otp_daftar')[0]['n'], 0)
+        self.app.config['OTP_CETAK_KODE'] = True              # opt-in eksplisit untuk pengembangan lokal
+        self.assertEqual(self.req('POST', '/auth/daftar', {'username': 'tono_1', 'email': 'tono@mail.com', 'password': 'Rahasia123'})[0], 200)
+
+    def test_seed_perintah_cli_memakai_password_acak(self):
+        baru = os.path.join(TMP, 'seed_acak.db'); d = sqlite_db(baru)          # database kosong baru, seperti `flask init-db` lalu `seed`
+        for s in _schema().split(';'):
+            if s.strip(): d.run(s)
+        d.commit(); kred = seed.jalankan(d, riwayat=False, acak=True); d.close(); self.dbfile = baru
+        sandi = dict(kred); self.assertEqual(set(sandi), {'admin', 'budi_santoso', 'siti_aulia'})
+        self.assertTrue(all(len(v) >= 12 for v in sandi.values()) and len(set(sandi.values())) == 3)
+        for lama in ('Admin12345', 'Budi12345', 'Siti12345'): self.assertNotIn(lama, sandi.values())
+        self.assertEqual(self.req('POST', '/auth/masuk', {'username': 'admin', 'password': 'Admin12345'})[0], 401)
+        self.assertEqual(self.req('POST', '/auth/masuk', {'username': 'admin', 'password': sandi['admin']})[0], 200)
+
+    def test_produk_menyertakan_dibuat_dan_baru_masuk_adalah_tanaman(self):
+        s, j = self.req('GET', '/produk'); self.assertEqual(s, 200)
+        self.assertTrue(all(isinstance(p['dibuat'], int) for p in j['data']))
+        terbaru = sorted(j['data'], key=lambda p: (-p['dibuat'], -p['id']))[:2]
+        self.assertEqual([p['nama'] for p in terbaru], ['Calathea Orbifolia', 'Aglonema Red Sumatra'])      # bukan pupuk/media tanam
+
+    def test_landing_slider_dari_data_produk_bukan_id_tetap(self):
+        r = self.c.get('/landing/script.js'); js = r.data.decode(); r.close()
+        self.assertNotIn('SLIDE_ALL', js); self.assertNotIn('kartuSamping', js)
+        self.assertIn('p.deskripsi', js); self.assertIn("'Baru Masuk'", js); self.assertIn("'Harga Termurah'", js)
+
+    def test_hsts_hanya_lewat_https(self):
+        self.assertNotIn('Strict-Transport-Security', self.c.get('/').headers)
+        self.assertIn('max-age=', self.c.get('/', base_url='https://localhost').headers['Strict-Transport-Security'])
+
+
+class TestChat(Dasar):
+    """Chat pelanggan <-> admin: isolasi data (IDOR), validasi, batas kirim, tanda dibaca."""
+    def setUp(self):
+        super().setUp()
+        self.bud = self.login('budi_santoso', 'Budi12345'); self.sit = self.login('siti_aulia', 'Siti12345'); self.adm = self.login('admin', 'Admin12345')
+        self.uid = lambda u: self.sql('SELECT id FROM pengguna WHERE username=%s', (u,))[0]['id']
+
+    def test_alur_dasar_dan_isolasi_antar_pelanggan(self):
+        s, j = self.req('POST', '/chat', {'isi': 'Halo, Anggrek Sari ready?'}, self.bud); self.assertEqual(s, 201); self.assertEqual(j['data']['dari'], 'customer')
+        self.req('POST', '/chat', {'isi': 'Rahasia Budi'}, self.bud)
+        self.assertEqual(len(self.req('GET', '/chat', tok=self.bud)[1]['data']['pesan']), 2)
+        self.assertEqual(self.req('GET', '/chat', tok=self.sit)[1]['data']['pesan'], [])                       # Siti tidak melihat chat Budi
+        self.assertEqual(self.req('GET', f"/admin/chat/{self.uid('budi_santoso')}", tok=self.sit)[0], 403)   # pelanggan tidak bisa pakai endpoint admin
+        self.assertEqual(self.req('GET', '/admin/chat', tok=self.bud)[0], 403)
+        self.assertEqual(self.req('POST', f"/admin/chat/{self.uid('budi_santoso')}", {'isi': 'x'}, self.bud)[0], 403)
+        self.assertEqual(self.req('POST', '/chat', {'isi': 'x', 'user_id': self.uid('siti_aulia'), 'dari': 'admin'}, self.bud)[1]['data']['dari'], 'customer')  # id/peran dari input diabaikan
+        self.assertEqual(self.sql('SELECT COUNT(*) AS n FROM chat_pesan WHERE user_id=%s', (self.uid('siti_aulia'),))[0]['n'], 0)
+
+    def test_butuh_login_dan_admin_tidak_memakai_endpoint_pelanggan(self):
+        for m, p in (('GET', '/chat'), ('POST', '/chat'), ('GET', '/chat/belum'), ('GET', '/admin/chat'), ('GET', '/admin/chat/belum')):
+            self.assertEqual(self.req(m, p, {'isi': 'x'} if m == 'POST' else None)[0], 401, p)
+        self.assertEqual(self.req('POST', '/chat', {'isi': 'x'}, self.adm)[0], 403)                            # admin tidak punya percakapan sendiri
+
+    def test_admin_membalas_dan_tanda_dibaca(self):
+        b = self.uid('budi_santoso'); self.req('POST', '/chat', {'isi': 'Pertanyaan 1'}, self.bud)
+        s, j = self.req('GET', '/admin/chat', tok=self.adm); self.assertEqual((j['data'][0]['username'], j['data'][0]['belum']), ('budi_santoso', 1))
+        self.assertEqual(self.req('GET', '/admin/chat/belum', tok=self.adm)[1]['data']['belum'], 1)
+        s, j = self.req('GET', f'/admin/chat/{b}', tok=self.adm); self.assertEqual(len(j['data']['pesan']), 1); self.assertEqual(j['data']['pelanggan']['username'], 'budi_santoso')
+        self.assertEqual(self.req('GET', '/admin/chat/belum', tok=self.adm)[1]['data']['belum'], 0)             # dibuka admin = terbaca
+        s, j = self.req('GET', '/chat', tok=self.bud); self.assertEqual(j['data']['dibacaSampai'], j['data']['pesan'][0]['id'])   # Budi tahu pesannya dibaca
+        s, j = self.req('POST', f'/admin/chat/{b}', {'isi': 'Ready, stok 30.'}, self.adm); self.assertEqual((s, j['data']['dari']), (201, 'admin'))
+        self.assertEqual(self.req('GET', '/chat/belum', tok=self.bud)[1]['data']['belum'], 1)
+        self.assertEqual(self.sql('SELECT admin_id FROM chat_pesan WHERE dari=%s', ('admin',))[0]['admin_id'], self.uid('admin'))
+        akhir = self.req('GET', '/chat', tok=self.bud)[1]['data']['pesan'][-1]['id']
+        self.assertEqual(self.req('GET', f'/chat?sejak={akhir}', tok=self.bud)[1]['data']['pesan'], [])        # polling: tidak ada yang baru
+        self.assertEqual(self.req('GET', '/chat/belum', tok=self.bud)[1]['data']['belum'], 0)
+
+    def test_admin_hanya_membalas_tidak_memulai_dan_target_harus_pelanggan(self):
+        self.assertEqual(self.req('POST', f"/admin/chat/{self.uid('siti_aulia')}", {'isi': 'Halo'}, self.adm)[0], 404)   # Siti belum pernah chat
+        self.assertEqual(self.req('POST', f"/admin/chat/{self.uid('admin')}", {'isi': 'Halo'}, self.adm)[0], 404)        # target admin
+        self.assertEqual(self.req('GET', '/admin/chat/99999', tok=self.adm)[0], 404)
+        self.req('POST', '/chat', {'isi': 'Tes'}, self.sit); self.sql('UPDATE pengguna SET aktif=0 WHERE username=%s', ('siti_aulia',))
+        self.assertEqual(self.req('POST', f"/admin/chat/{self.uid('siti_aulia')}", {'isi': 'Halo'}, self.adm)[0], 409)   # akun nonaktif
+
+    def test_validasi_isi_pesan(self):
+        for salah in ('', '   ', '\n\n', 'x' * 1001, 123, None, ['a'], {'a': 1}):
+            self.assertEqual(self.req('POST', '/chat', {'isi': salah}, self.bud)[0], 400, repr(salah)[:30])
+        self.assertEqual(self.req('POST', '/chat', {'isi': 'x' * 1000}, self.bud)[0], 201)
+        s, j = self.req('POST', '/chat', {'isi': 'a\x00b\u202ec\u200bd\r\n\r\n\r\n\r\ne'}, self.bud)      # karakter kontrol & bidi dibuang, baris kosong dirapikan
+        self.assertEqual(j['data']['isi'], 'abcd\n\ne')
+        s, j = self.req('POST', '/chat', {'isi': '<script>alert(1)</script><img src=x onerror=alert(1)>'}, self.bud)
+        self.assertEqual(j['data']['isi'], '<script>alert(1)</script><img src=x onerror=alert(1)>')            # disimpan apa adanya; keamanan di sisi tampilan (textContent)
+
+    def test_batas_kirim_per_menit_dan_pesan_beruntun(self):
+        self.app.config['LAJU_CHAT'] = 5
+        kode = [self.req('POST', '/chat', {'isi': f'p{i}'}, self.bud)[0] for i in range(7)]
+        self.assertEqual(kode, [201] * 5 + [429] * 2)
+        self.assertEqual(self.req('POST', '/chat', {'isi': 'siti'}, self.sit)[0], 201)                         # batas per akun: Siti tidak ikut terblokir
+        from app import security; security.reset_laju(); self.app.config.update(LAJU_CHAT=100, CHAT_MAKS_BERUNTUN=6)
+        self.assertEqual(self.req('POST', '/chat', {'isi': 'ke-6'}, self.bud)[0], 201)                        # total tanpa balasan: 5 + 1 = 6
+        s, j = self.req('POST', '/chat', {'isi': 'ke-7'}, self.bud); self.assertEqual(s, 429); self.assertIn('belum membalas', j['error'])
+        self.req('POST', f"/admin/chat/{self.uid('budi_santoso')}", {'isi': 'Maaf baru balas'}, self.adm)
+        self.assertEqual(self.req('POST', '/chat', {'isi': 'terima kasih'}, self.bud)[0], 201)                # admin membalas -> hitungan mulai ulang
+
+    def test_halaman_lama_dan_parameter_aneh(self):
+        for i in range(60): self.sql('INSERT INTO chat_pesan (user_id,dari,isi,dibuat,dibaca) VALUES (%s,%s,%s,%s,1)', (self.uid('budi_santoso'), 'customer', f'm{i}', 1000 + i))
+        s, j = self.req('GET', '/chat', tok=self.bud); d = j['data']; self.assertEqual((len(d['pesan']), d['adaLagi'], d['pesan'][-1]['isi']), (50, True, 'm59'))
+        s, j = self.req('GET', f"/chat?sebelum={d['pesan'][0]['id']}", tok=self.bud); self.assertEqual((len(j['data']['pesan']), j['data']['adaLagi']), (10, False))
+        for aneh in ('abc', '-1', '1; DROP TABLE pengguna', '9' * 30, '1.5'): self.assertEqual(self.req('GET', f'/chat?sejak={aneh}', tok=self.bud)[0], 200, aneh)
+        self.assertEqual(self.sql('SELECT COUNT(*) AS n FROM pengguna')[0]['n'], 3)
+
+    def test_pesan_ikut_terhapus_bersama_akun_dan_audit_admin(self):
+        self.req('POST', '/chat', {'isi': 'Halo'}, self.bud); self.sql('DELETE FROM pengguna WHERE username=%s', ('budi_santoso',))
+        self.assertEqual(self.sql('SELECT COUNT(*) AS n FROM chat_pesan')[0]['n'], 0)
+
+    def test_komponen_chat_tidak_memakai_innerhtml_untuk_isi_pesan(self):
+        js = open(os.path.join(ROOT, 'frontend', 'shared', 'chat.js'), encoding='utf-8').read()
+        bagian = [l for l in js.split('\n') if re.search(r'\.innerHTML\s*[+]?=', l)]
+        self.assertEqual(len(bagian), 1); self.assertNotIn('${', bagian[0]); self.assertNotIn('m.isi', bagian[0])      # hanya kerangka statis
+        self.assertNotIn('insertAdjacentHTML', js); self.assertNotIn('outerHTML', js)
+
+
+class TestPerforma(Dasar):
+    def test_gzip_hanya_bila_diminta_dan_sah(self):
+        r = self.c.get('/api/produk'); self.assertNotIn('Content-Encoding', r.headers)
+        r = self.c.get('/api/produk', headers={'Accept-Encoding': 'gzip'}); self.assertEqual(r.headers.get('Content-Encoding'), 'gzip')
+        import gzip, json; self.assertEqual(len(json.loads(gzip.decompress(r.data))['data']), 12); self.assertIn('Accept-Encoding', r.headers['Vary'])
+        r = self.c.get('/shared/core.js', headers={'Accept-Encoding': 'gzip'}); self.assertEqual(r.headers.get('Content-Encoding'), 'gzip')
+        self.assertIn('const Api', gzip.decompress(r.data).decode())
+        r2 = self.c.get('/shared/core.js', headers={'Accept-Encoding': 'gzip'}); self.assertEqual(r.data, r2.data)     # versi kompresi di-cache memori
+        r = self.c.get('/media/produk/' + 'a' * 32 + '.jpg', headers={'Accept-Encoding': 'gzip'}); self.assertEqual(r.status_code, 404)
+
+    def test_aset_berversi_di_cache_selamanya_html_selalu_segar(self):
+        h = self.c.get('/').get_data(as_text=True)
+        self.assertRegex(h, r'src="/shared/core\.js\?v=\d+"'); self.assertRegex(h, r'src="/landing/script\.js\?v=\d+"'); self.assertRegex(h, r'href="/landing/style\.css\?v=\d+"')
+        self.assertEqual(self.c.get('/').headers['Cache-Control'], 'no-cache')
+        self.assertIn('immutable', self.c.get('/shared/core.js?v=123').headers['Cache-Control'])
+        self.assertEqual(self.c.get('/shared/core.js').headers['Cache-Control'], 'no-cache')
+        self.assertEqual(self.c.get('/shared/chat.js?v=1').status_code, 200)
+
+    def test_tailwind_build_otomatis_menggantikan_cdn(self):
+        asal = self.app.config['FRONTEND_DIR']; tmp = os.path.join(TMP, 'fe_' + self.id()); shutil.copytree(asal, tmp)
+        app2 = create_app({'TESTING': True, 'FRONTEND_DIR': tmp, 'UPLOAD_DIR': self.up}); c2 = app2.test_client()
+        h = c2.get('/masuk').get_data(as_text=True); self.assertIn('cdn.tailwindcss.com', h); self.assertIn("'unsafe-eval'", h)    # belum di-build: pakai CDN
+        open(os.path.join(tmp, 'shared', 'app.css'), 'w').write('.x{color:red}')
+        for hal in ('/', '/masuk', '/daftar', '/dashboard', '/admin', '/produk/1'):
+            h = c2.get(hal).get_data(as_text=True)
+            self.assertNotIn('cdn.tailwindcss.com', h, hal); self.assertNotIn('unsafe-eval', h, hal); self.assertNotIn('/shared/tailwind.js', h, hal)
+            self.assertRegex(h, r'href="/shared/app\.css\?v=\d+"', hal)
+
+    def test_header_waktu_dan_log_request_lambat(self):
+        r = self.c.get('/api/kesehatan'); self.assertRegex(r.headers['Server-Timing'], r'^app;dur=\d+$')
+        self.app.config['LAMBAT_MS'] = -1
+        with self.assertLogs('app', 'WARNING') as cm: self.c.get('/api/produk')
+        self.assertTrue(any('LAMBAT GET /api/produk' in l for l in cm.output))
+
+    def test_sesi_tidak_menulis_db_di_setiap_request(self):
+        tok = self.login('budi_santoso', 'Budi12345'); exp = lambda: self.sql('SELECT kedaluwarsa FROM sesi')[0]['kedaluwarsa']
+        sebelum = exp(); self.req('GET', '/auth/saya', tok=tok); self.assertEqual(exp(), sebelum)              # sisa masih > separuh: tidak diperpanjang
+        self.sql('UPDATE sesi SET kedaluwarsa=%s', (int(__import__('time').time() * 1000) + 5 * 60000,))        # sisa 5 menit < separuh (10)
+        self.req('GET', '/auth/saya', tok=tok); self.assertGreater(exp(), int(__import__('time').time() * 1000) + 15 * 60000)
+
+
+class TestFrontend(Dasar):
+    """Frontend statis dilayani Flask dari origin yang sama dengan API, lewat URL pendek."""
+    def test_url_pendek_semua_halaman(self):
+        for url in ('/', '/masuk', '/daftar', '/dashboard', '/admin', '/produk/3'):
+            r = self.c.get(url); self.assertEqual(r.status_code, 200, url)
+            self.assertIn(b'/shared/core.js', r.data); self.assertNotIn(b'../', r.data); self.assertNotIn(b'data.js', r.data); r.close()
+        self.assertEqual(self.c.get('/produk').headers['Location'], '/#katalog')
+        for aset in ('/shared/core.js', '/login/script.js', '/register/style.css', '/landing/script.js'):
+            r = self.c.get(aset); self.assertEqual(r.status_code, 200, aset); r.close()
+
+    def test_alamat_lama_dialihkan_ke_url_pendek(self):
+        for lama, baru in (('/landing/index.html', '/'), ('/landing/', '/'), ('/landing', '/'), ('/login/index.html', '/masuk'), ('/register/index.html', '/daftar'),
+                           ('/customer/index.html', '/dashboard'), ('/admin/index.html', '/admin'), ('/produk/index.html?id=5', '/produk/5'), ('/login/index.html?next=customer', '/masuk?next=customer')):
+            r = self.c.get(lama); self.assertEqual((r.status_code, r.headers['Location']), (301, baru), lama)
+
+    def test_html_tidak_bisa_diakses_lewat_path_folder(self):
+        for p in ('/login/style.css.map', '/shared/', '/shared', '/app/config.py', '/schema.sql'):
+            self.assertEqual(self.c.get(p).status_code, 404, p)
+
+    def test_login_tanpa_akun_demo_dan_kontak_langsung(self):
+        r = self.c.get('/masuk'); self.assertNotIn(b'Akun demo', r.data); self.assertNotIn(b'Budi12345', r.data); self.assertNotIn(b'Admin12345', r.data); r.close()
+        r = self.c.get('/landing/script.js'); self.assertIn(b'https://wa.me/', r.data); self.assertIn(b'mailto:', r.data); r.close()
+
+    def test_data_dummy_hilang_dan_file_lain_tidak_bocor(self):
+        self.assertEqual(self.c.get('/shared/data.js').status_code, 404)
+        for p in ('/%2e%2e/app/config.py', '/shared/..%2f..%2fapp%2fconfig.py', '/../schema.sql'):
+            self.assertEqual(self.c.get(p).status_code, 404, p)
+        self.assertEqual(self.c.get('/api/').get_json(), {'error': 'Data tidak ditemukan.'})
+        self.assertEqual(self.c.get('/media/x').status_code, 404)
+
+    def test_alur_frontend_lewat_satu_origin(self):
+        """Simulasi yang dilakukan core.js: masuk -> Bearer -> data; gambar unggahan berupa path relatif /media/."""
+        t = self.login('budi_santoso', 'Budi12345')
+        s, j = self.req('GET', '/keranjang', tok=t); self.assertEqual((s, j['data']), (200, []))
+        o = self.beli(t); self.assertEqual(self.req('POST', f"/pesanan/{o['id']}/bayar", {'bukti': png_url()}, t)[0], 200)
+        u = self.req('GET', '/pesanan/saya', tok=t)[1]['data'][0]['bukti']; self.assertTrue(u.startswith('/media/bukti/'))
+
+
+class Keamanan(Dasar):
+    """Regresi untuk celah yang diperbaiki pada audit keamanan."""
+    prod = TestAdmin.prod
+
+    def test_tidak_bisa_hapus_berkas_milik_orang_lain_lewat_profil(self):
+        adm, t = self.login('admin', 'Admin12345'), self.login('budi_santoso', 'Budi12345')
+        s, j = self.req('POST', '/admin/produk', self.prod(gambar=png_url()), adm); p = j['data']
+        f = os.path.join(self.up, 'produk', p['gambar'].rsplit('/', 1)[1])
+        # menunjuk foto produk sebagai foto profil harus ditolak ...
+        s, j = self.req('PUT', '/profil', {'username': 'budi_santoso', 'email': 'budi@mail.com', 'foto': p['gambar']}, t)
+        self.assertEqual(s, 400)
+        # ... dan mengganti foto profil tidak boleh menyentuh berkas produk
+        self.req('PUT', '/profil', {'username': 'budi_santoso', 'email': 'budi@mail.com', 'foto': png_url()}, t)
+        self.assertTrue(os.path.exists(f))
+
+    def test_foto_profil_tolak_url_eksternal(self):
+        t = self.login('budi_santoso', 'Budi12345')
+        s, _ = self.req('PUT', '/profil', {'username': 'budi_santoso', 'email': 'budi@mail.com', 'foto': 'https://evil.example/x.png'}, t)
+        self.assertEqual(s, 400)
+
+    def test_url_gambar_produk_tolak_karakter_injeksi(self):
+        adm = self.login('admin', 'Admin12345')
+        for u in ('https://a.example/x"onerror="alert(1)', 'https://a.example/<b>', "https://a.example/x'y"):
+            self.assertEqual(self.req('POST', '/admin/produk', self.prod(gambar=u), adm)[0], 400, u)
+        self.assertEqual(self.req('POST', '/admin/produk', self.prod(gambar='https://a.example/ok.jpg'), adm)[0], 201)
+
+    def test_gambar_riwayat_pesanan_tidak_terhapus_saat_produk_dihapus(self):
+        adm, t = self.login('admin', 'Admin12345'), self.login('budi_santoso', 'Budi12345')
+        s, j = self.req('POST', '/admin/produk', self.prod(gambar=png_url(), stok=5), adm); p = j['data']
+        f = os.path.join(self.up, 'produk', p['gambar'].rsplit('/', 1)[1])
+        self.req('POST', '/keranjang', {'produkId': p['id'], 'qty': 1}, t); self.assertEqual(self.req('POST', '/checkout', ALAMAT, t)[0], 201)
+        self.assertEqual(self.req('DELETE', f"/admin/produk/{p['id']}", tok=adm)[0], 200)
+        self.assertTrue(os.path.exists(f))        # masih dirujuk riwayat pesanan
+
+    def test_gambar_dimensi_raksasa_ditolak_dan_exif_dihormati(self):
+        t = self.login('budi_santoso', 'Budi12345'); o = self.beli(t)
+        s, j = self.req('POST', f"/pesanan/{o['id']}/bayar", {'bukti': png_url(6000, 5000)}, t)
+        self.assertEqual((s, j['error']), (400, 'Dimensi gambar terlalu besar.'))
+        b = io.BytesIO(); im = Image.new('RGB', (60, 20), 'red'); ex = Image.Exif(); ex[0x0112] = 6; im.save(b, 'JPEG', exif=ex)
+        url = 'data:image/jpeg;base64,' + base64.b64encode(b.getvalue()).decode()
+        s, j = self.req('PUT', '/profil', {'username': 'budi_santoso', 'email': 'budi@mail.com', 'foto': url}, t)
+        with Image.open(os.path.join(self.up, 'foto', j['data']['foto'].rsplit('/', 1)[1])) as r: self.assertEqual(r.size, (20, 60))
+
+    def test_batas_laju_kontak_dan_daftar(self):
+        m = {'nama': 'Tono', 'email': 'tono@mail.com', 'jenis': 'Pertanyaan', 'isi': 'Apakah ada pengiriman luar kota?'}
+        kode = [self.req('POST', '/kontak', m)[0] for _ in range(7)]
+        self.assertEqual(kode, [201] * 5 + [429] * 2)
+        kode = [self.req('POST', '/auth/daftar', {'username': f'user_{i}', 'email': f'u{i}@mail.com', 'password': 'Abcdef123'})[0] for i in range(12)]
+        self.assertEqual(kode, [200] * 10 + [429] * 2)
+
+    def test_pembatas_login_per_ip_dan_kunci_tak_bisa_ditabrak(self):
+        for i in range(20):        # 20 username berbeda dari IP yang sama -> IP diblokir setelah 5*4 gagal
+            self.req('POST', '/auth/masuk', {'username': f'orang_{i}', 'password': 'salah123'})
+        s, j = self.req('POST', '/auth/masuk', {'username': 'budi_santoso', 'password': 'Budi12345'}); self.assertEqual(s, 429)
+
+    def test_batas_pesanan_menunggu_bayar(self):
+        t = self.login('budi_santoso', 'Budi12345')
+        self.app.config['MAKS_PESANAN_TERTUNDA'] = 2
+        for pid in (1, 2, 3):
+            self.req('POST', '/keranjang', {'produkId': pid, 'qty': 1}, t)
+            s, j = self.req('POST', '/checkout', ALAMAT, t)
+        self.assertEqual(s, 409)
+
+    def test_path_traversal_dan_header_keamanan(self):
+        for u in ('/..%2f..%2fapp/config.py', '/%2e%2e/app/config.py', '//etc', '/landing/../../app/config.py'):
+            self.assertIn(self.c.get(u).status_code, (301, 308, 404), u)
+        r = self.c.get('/')
+        self.assertEqual(r.headers['X-Frame-Options'], 'DENY'); self.assertIn("frame-ancestors 'none'", r.headers['Content-Security-Policy'])
+        r.close()
+
+
+class TestAlamat(Dasar):
+    """Fitur alamat pengiriman: validasi, salinan di pesanan, profil, dan tampilan admin."""
+
+    def isi_keranjang(self, t, pid=3, qty=1): self.req('POST', '/keranjang', {'produkId': pid, 'qty': qty}, t)
+
+    def test_checkout_tanpa_atau_dengan_alamat_tidak_valid_ditolak(self):
+        t = self.login('budi_santoso', 'Budi12345'); self.isi_keranjang(t)
+        n0 = self.sql('SELECT COUNT(*) AS n FROM pesanan WHERE user_id=2')[0]['n']
+        self.assertEqual(self.req('POST', '/checkout', tok=t)[0], 400)                     # tanpa body
+        for k, v in (('telepon', '12345'), ('telepon', '021555555'), ('kodePos', '4016'), ('kodePos', 'abcde'),
+                     ('alamat', 'pendek'), ('kota', ''), ('penerima', 'Bu')):
+            s, j = self.req('POST', '/checkout', {**ALAMAT, k: v}, t); self.assertEqual(s, 400, (k, v, j))
+        self.assertEqual(self.sql('SELECT COUNT(*) AS n FROM pesanan WHERE user_id=2')[0]['n'], n0)  # tak ada pesanan setengah jadi
+        self.assertEqual(self.req('GET', '/keranjang', tok=t)[1]['data'][0]['qty'], 1)              # keranjang utuh
+
+    def test_alamat_tersimpan_sebagai_salinan_dan_telepon_dinormalkan(self):
+        t = self.login('budi_santoso', 'Budi12345'); self.isi_keranjang(t)
+        s, j = self.req('POST', '/checkout', {**ALAMAT, 'telepon': '+62 812-3456-7801'}, t); self.assertEqual(s, 201, j)
+        self.assertEqual(j['data']['pengiriman'], {'penerima': 'Budi Santoso', 'telepon': '+6281234567801', 'alamat': ALAMAT['alamat'], 'kota': 'Kota Bandung', 'kodePos': '40162'})
+        # mengganti alamat profil tidak mengubah pesanan lama
+        self.req('PUT', '/profil', {'username': 'budi_santoso', 'email': 'budi@mail.com', 'telepon': '081111111111', 'alamat': 'Jl. Baru No. 99 Medan', 'kota': 'Medan', 'kodePos': '20111'}, t)
+        lama = [o for o in self.req('GET', '/pesanan/saya', tok=t)[1]['data'] if o['id'] == j['data']['id']][0]
+        self.assertEqual(lama['pengiriman']['kota'], 'Kota Bandung')
+
+    def test_simpan_sebagai_alamat_utama(self):
+        t = self.login('siti_aulia', 'Siti12345'); self.req('DELETE', '/keranjang/3', tok=t)
+        self.isi_keranjang(t, 4)
+        self.req('POST', '/checkout', {**ALAMAT, 'penerima': 'Siti A', 'kota': 'Kota Medan', 'simpan': True}, t)
+        u = self.req('GET', '/auth/saya', tok=t)[1]['data']
+        self.assertEqual((u['kota'], u['kodePos'], u['telepon']), ('Kota Medan', '40162', '081234567801'))
+
+    def test_profil_alamat_validasi_ubah_dan_hapus(self):
+        t = self.login('budi_santoso', 'Budi12345'); dasar = {'username': 'budi_santoso', 'email': 'budi@mail.com'}
+        a = {'telepon': '081234567899', 'alamat': 'Jl. Sawit Raya No. 5', 'kota': 'Pekanbaru', 'kodePos': '28111'}
+        self.assertEqual(self.req('PUT', '/profil', {**dasar, **a, 'kodePos': '1'}, t)[0], 400)          # sebagian tidak valid -> ditolak utuh
+        s, j = self.req('PUT', '/profil', {**dasar, **a}, t); self.assertEqual((s, j['data']['kota'], j['data']['kodePos']), (200, 'Pekanbaru', '28111'))
+        s, j = self.req('PUT', '/profil', dasar, t); self.assertEqual(j['data']['kota'], 'Pekanbaru')    # tanpa kunci alamat = tidak berubah
+        s, j = self.req('PUT', '/profil', {**dasar, 'telepon': '', 'alamat': '', 'kota': '', 'kodePos': ''}, t)
+        self.assertEqual((j['data']['alamat'], j['data']['telepon']), ('', ''))                         # semua kosong = dihapus
+
+    def test_admin_melihat_alamat_dan_pembeli_lain_tidak(self):
+        adm, t, siti = self.login('admin', 'Admin12345'), self.login('budi_santoso', 'Budi12345'), self.login('siti_aulia', 'Siti12345')
+        self.isi_keranjang(t); o = self.req('POST', '/checkout', ALAMAT, t)[1]['data']
+        a = [x for x in self.req('GET', '/admin/pesanan', tok=adm)[1]['data'] if x['id'] == o['id']][0]
+        self.assertEqual(a['pengiriman']['alamat'], ALAMAT['alamat'])
+        self.assertNotIn(o['id'], [x['id'] for x in self.req('GET', '/pesanan/saya', tok=siti)[1]['data']])
+
+    def test_alamat_berisi_html_disimpan_apa_adanya_dan_karakter_kontrol_dibuang(self):
+        t = self.login('budi_santoso', 'Budi12345'); self.isi_keranjang(t)
+        s, j = self.req('POST', '/checkout', {**ALAMAT, 'alamat': 'Jl. <b>Mawar</b> 12\x00\n\nBlok A'}, t); self.assertEqual(s, 201, j)
+        self.assertEqual(j['data']['pengiriman']['alamat'], 'Jl. <b>Mawar</b> 12 Blok A')   # pelolosan HTML dilakukan frontend (K.esc)
+
+
+if __name__ == '__main__':
+    unittest.main()
