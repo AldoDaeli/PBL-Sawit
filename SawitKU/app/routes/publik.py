@@ -66,6 +66,60 @@ def _simpan_kode(db, p, email, username, hash_password):
     return kode
 
 
+@bp.post('/auth/lupa')
+def lupa_password():
+    """Langkah 1 reset password: kirim kode OTP ke email akun. Respons SELALU sama (email terdaftar atau tidak)
+    agar penyerang tidak bisa memeriksa email mana yang punya akun."""
+    c = current_app.config
+    batasi_laju('lupa', c['LAJU_OTP'], 600)
+    db, email = get_db(), _email_dari(body())
+    if not email_ok(email): raise ApiError('Format email tidak valid.')
+    umum = ok({'berlaku': c['OTP_MENIT'], 'jeda': c['OTP_JEDA_DETIK']})
+    u, now = db.one('SELECT id, username, aktif FROM pengguna WHERE LOWER(email)=%s', (email,)), now_ms()
+    if not u or not u['aktif']: return umum
+    p = db.one('SELECT * FROM otp_reset WHERE email=%s', (email,))
+    if p and now - p['kirim_terakhir'] < c['OTP_JEDA_DETIK'] * 1000: return umum          # jeda kirim ulang
+    n = p['kirim_n'] if p and now - p['kirim_terakhir'] < 3_600_000 else 0                 # jendela 1 jam
+    if n >= c['OTP_MAKS_KIRIM']: return umum
+    kode, garam = otp.buat_kode(), secrets.token_hex(16)
+    nilai = (otp.hash_kode(email, kode, garam), garam, now + c['OTP_MENIT'] * 60000, n + 1, now)
+    if p: db.run('UPDATE otp_reset SET kode_hash=%s, garam=%s, kedaluwarsa=%s, salah=0, kirim_n=%s, kirim_terakhir=%s WHERE email=%s', nilai + (email,))
+    else: db.run('INSERT INTO otp_reset (kode_hash,garam,kedaluwarsa,salah,kirim_n,kirim_terakhir,email) VALUES (%s,%s,%s,0,%s,%s,%s)', nilai + (email,))
+    db.commit()
+    try: otp.kirim_reset(email, u['username'], kode)
+    except ApiError as e:
+        if e.status == 503: raise                       # SMTP belum dikonfigurasi: pesan jelas untuk admin (tidak membocorkan keberadaan akun)
+        current_app.logger.warning('Reset password: email gagal terkirim')
+    return umum
+
+
+@bp.post('/auth/lupa/reset')
+def lupa_reset():
+    """Langkah 2: email + kode OTP + password baru. Berhasil -> password diganti, semua sesi lama dikeluarkan, blokir login dibuka."""
+    c, b = current_app.config, body()
+    batasi_laju('otp', c['LAJU_OTP'], 600)
+    db, email = get_db(), _email_dari(b)
+    kode, pw = re.sub(r'\s', '', str(b.get('kode') or '')), str(b.get('password') or '')
+    if not re.fullmatch(r'\d{6}', kode): raise ApiError('Kode OTP terdiri dari 6 angka.')
+    if not password_ok(pw): raise ApiError('Password 8–64 karakter, kombinasi huruf dan angka.')
+    gagal = 'Kode salah atau sudah kedaluwarsa. Minta kode baru.'
+    p = db.one('SELECT * FROM otp_reset WHERE email=%s', (email,))
+    if not p or p['kedaluwarsa'] < now_ms() or p['salah'] >= c['OTP_MAKS_SALAH']: raise ApiError(gagal, 400)
+    if not otp.cocok(otp.hash_kode(email, kode, p['garam']), p['kode_hash']):
+        current_app.logger.warning('OTP RESET SALAH ip=%s', ip_klien())
+        db.run('UPDATE otp_reset SET salah=salah+1 WHERE email=%s', (email,)); db.commit()
+        raise ApiError(gagal, 400)
+    u = db.one('SELECT id, username, aktif FROM pengguna WHERE LOWER(email)=%s', (email,))
+    if not u or not u['aktif']: raise ApiError(gagal, 400)
+    db.run('UPDATE pengguna SET hash=%s WHERE id=%s', (hash_pw(pw), u['id']))
+    db.run('DELETE FROM otp_reset WHERE email=%s', (email,))
+    db.run('DELETE FROM sesi WHERE user_id=%s', (u['id'],))
+    reset_gagal(db, 'u:' + u['username'].lower()); db.commit()
+    current_app.logger.info('PASSWORD RESET user_id=%s ip=%s', u['id'], ip_klien())
+    otp.kirim_info_password_diubah(email, u['username'])
+    return ok()
+
+
 @bp.post('/auth/daftar')
 def daftar():
     """Langkah 1: validasi data, simpan sebagai pendaftaran tertunda, kirim kode OTP ke email. Akun BELUM dibuat."""
@@ -169,7 +223,9 @@ def produk_detail(pid):
 def produk_ulasan(pid):
     rows = get_db().all('SELECT r.*, u.username AS nama FROM ulasan r JOIN pengguna u ON u.id=r.user_id '
                         'WHERE r.produk_id=%s ORDER BY r.dibuat DESC', (pid,))
-    return ok([ulasan_out(r) for r in rows])
+    from ..services import lanjutan_ulasan
+    lj = lanjutan_ulasan(get_db(), [r['id'] for r in rows])
+    return ok([ulasan_out(r, lj.get(r['id'])) for r in rows])
 
 
 # ---------------- Kontak ----------------
