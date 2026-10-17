@@ -7,7 +7,8 @@ import re, secrets
 from .. import otp
 from ..security import now_ms, wajib, cek_pw, batasi_laju, sisa_blokir, catat_gagal, reset_gagal
 from ..serializers import user_out, produk_out
-from ..services import sapu, muat_pesanan, batalkan, hitung_rating
+from ..services import sapu, muat_pesanan, batalkan, hitung_rating, lunas
+from .. import midtrans
 from ..uploads import simpan_data_url, resolve_gambar, hapus_media
 from ..validators import username_ok, email_ok, password_ok, to_int, baca_alamat
 
@@ -123,12 +124,94 @@ def _milik(db, oid):
 @bp.post('/pesanan/<int:oid>/bayar')
 @wajib('customer')
 def bayar(oid):
+    """Unggah bukti QRIS manual. Juga dipakai untuk unggah ULANG setelah pembayaran ditolak (status kembali 'menunggu_bayar')."""
     db = get_db(); sapu(db)
     o = _milik(db, oid)
     if o['status'] != 'menunggu_bayar': raise ApiError('Pesanan tidak dapat dibayar.', 409)
     path = simpan_data_url(body().get('bukti'), 'bukti')
-    db.run('UPDATE pesanan SET bukti=%s, status=%s WHERE id=%s', (path, 'menunggu_verifikasi', oid))
+    db.run('UPDATE pesanan SET bukti=%s, status=%s, alasan=%s, metode=%s, t_bayar=%s WHERE id=%s', (path, 'menunggu_verifikasi', '', 'qris', now_ms(), oid))
+    db.commit(); hapus_media(o['bukti'], db)
     return ok()
+
+
+# ---------------- Midtrans (virtual account) ----------------
+def _terapkan_midtrans(db, o, d):
+    if midtrans.berhasil(d):
+        if int(float(d.get('gross_amount', 0))) != int(o['total']):
+            current_app.logger.warning('MIDTRANS jumlah tidak cocok pesanan=%s', o['id']); return False
+        if o['status'] == 'dibatalkan':
+            current_app.logger.warning('MIDTRANS LUNAS tetapi pesanan %s sudah dibatalkan: perlu refund/pemulihan manual', o['id']); return False
+        return lunas(db, o, 'midtrans')
+    return False
+
+
+@bp.post('/pesanan/<int:oid>/midtrans')
+@wajib('customer')
+def midtrans_buat(oid):
+    db = get_db(); sapu(db)
+    if not midtrans.aktif(): raise ApiError('Pembayaran Virtual Account belum diaktifkan.', 503)
+    o = _milik(db, oid)
+    if o['status'] != 'menunggu_bayar': raise ApiError('Pesanan tidak dapat dibayar.', 409)
+    items = db.all('SELECT produk_id, nama, harga, qty FROM pesanan_item WHERE pesanan_id=%s', (oid,))
+    menit = max(1, int((o['batas_bayar'] - now_ms()) / 60000))
+    order_id = f'SK{oid}-{secrets.token_hex(3)}'
+    d = midtrans.buat_transaksi(order_id, o['total'], {'penerima': o['penerima'] or g.user['username'], 'email': g.user['email'], 'telepon': o['telepon']},
+                                items, request.host_url.rstrip('/') + '/dashboard#pesanan', menit)
+    db.run('UPDATE pesanan SET midtrans_id=%s, metode=%s WHERE id=%s', (order_id, 'midtrans', oid))
+    return ok({'redirectUrl': d['redirect_url']})
+
+
+@bp.post('/pesanan/<int:oid>/midtrans/cek')
+@wajib('customer')
+def midtrans_cek(oid):
+    """Sinkronkan status dari Midtrans (dipanggil saat pembeli kembali dari halaman bayar; webhook tetap jalur utama)."""
+    db = get_db(); o = _milik(db, oid)
+    if not midtrans.aktif() or not o['midtrans_id'] or o['status'] not in ('menunggu_bayar', 'menunggu_verifikasi'): return ok({'lunas': o['status'] == 'diproses'})
+    try: d = midtrans.status(o['midtrans_id'])
+    except ApiError: return ok({'lunas': False})
+    return ok({'lunas': _terapkan_midtrans(db, o, d)})
+
+
+@bp.post('/midtrans/notifikasi')
+def midtrans_notifikasi():
+    """Webhook dari Midtrans (publik, tetapi WAJIB bertanda tangan sah)."""
+    d = request.get_json(silent=True) or {}
+    if not midtrans.aktif() or not midtrans.signature_sah(d):
+        current_app.logger.warning('MIDTRANS notifikasi ditolak (tanda tangan) ip=%s', request.remote_addr)
+        raise ApiError('Tanda tangan tidak sah.', 403)
+    db = get_db()
+    o = db.one('SELECT * FROM pesanan WHERE midtrans_id=%s FOR UPDATE', (str(d.get('order_id')),))
+    if o: _terapkan_midtrans(db, o, d)
+    return ok()
+
+
+# ---------------- Pelacakan paket ----------------
+def _kode_pesanan(kode):
+    m = re.fullmatch(r'#?(?:SK-?)?0*(\d{1,9})', kode.strip().upper())
+    return int(m.group(1)) if m else None
+
+
+@bp.get('/lacak')
+@wajib()
+def lacak():
+    """Lacak berdasarkan nomor pesanan (12, #12, SK-12) ATAU nomor resi. Customer hanya pesanannya sendiri; admin semua."""
+    db, kode = get_db(), str(request.args.get('kode') or '').strip()[:40]
+    if len(kode) < 1: raise ApiError('Isi nomor pesanan atau nomor resi.')
+    batas, arg = ('', ()) if g.user['peran'] == 'admin' else (' AND user_id=%s', (g.user['id'],))
+    nomor = _kode_pesanan(kode)
+    o = db.one('SELECT * FROM pesanan WHERE id=%s' + batas, (nomor,) + arg) if nomor else None
+    if not o: o = db.one('SELECT * FROM pesanan WHERE resi=%s' + batas, (re.sub(r'\s', '', kode).upper(),) + arg)
+    if not o: raise ApiError('Pesanan atau resi tidak ditemukan.', 404)
+    p = muat_pesanan(db, [o])[0]; w = p['waktu']
+    if o['status'] == 'dibatalkan':
+        langkah = [('Pesanan dibuat', p['dibuat']), ('Pesanan dibatalkan', None)]
+        selesai = [True, True]
+    else:
+        langkah = [('Pesanan dibuat', p['dibuat']), ('Pembayaran diterima', w['bayar'] if w['proses'] else None), ('Pesanan dikemas', w['proses']),
+                   ('Dalam pengiriman', w['kirim']), ('Pesanan diterima', w['selesai'])]
+        selesai = [t is not None for _, t in langkah]
+    tl = [{'label': l, 'waktu': t, 'selesai': s} for (l, t), s in zip(langkah, selesai)]
+    return ok({'pesanan': p, 'timeline': tl})
 
 
 @bp.post('/pesanan/<int:oid>/batal')
@@ -145,7 +228,7 @@ def batal(oid):
 def terima(oid):
     db = get_db(); o = _milik(db, oid)
     if o['status'] != 'dikirim': raise ApiError('Pesanan belum dikirim.', 409)
-    db.run('UPDATE pesanan SET status=%s WHERE id=%s', ('selesai', oid))
+    db.run('UPDATE pesanan SET status=%s, t_selesai=%s WHERE id=%s', ('selesai', now_ms(), oid))
     return ok()
 
 
@@ -169,6 +252,23 @@ def kirim_ulasan():
     except IntegrityErrors:
         raise ApiError('Kamu sudah mengulas produk ini.', 409)
     hitung_rating(db, pid)
+    return ok(None, 201)
+
+
+@bp.post('/ulasan/<int:rid>/balas')
+@wajib('customer')
+def balas_ulasan(rid):
+    """Pemilik ulasan membalas komentar admin. Bergantian: hanya boleh bila pesan terakhir dari admin; maks 5 balasan pelanggan per ulasan."""
+    db, uid = get_db(), g.user['id']
+    teks = str(body().get('teks') or '').strip()
+    r = db.one('SELECT id, user_id, balasan_teks FROM ulasan WHERE id=%s FOR UPDATE', (rid,))
+    if not r or r['user_id'] != uid: raise ApiError('Ulasan tidak ditemukan.', 404)
+    if not r['balasan_teks']: raise ApiError('Admin belum membalas ulasan ini.', 409)
+    if not 3 <= len(teks) <= 300: raise ApiError('Balasan 3–300 karakter.')
+    lanj = db.all('SELECT dari FROM ulasan_balas WHERE ulasan_id=%s ORDER BY id', (rid,))
+    if lanj and lanj[-1]['dari'] == 'customer': raise ApiError('Tunggu balasan admin dulu.', 409)
+    if sum(1 for x in lanj if x['dari'] == 'customer') >= 5: raise ApiError('Batas balasan untuk ulasan ini sudah tercapai.', 409)
+    db.run('INSERT INTO ulasan_balas (ulasan_id,dari,user_id,teks,dibuat) VALUES (%s,%s,%s,%s,%s)', (rid, 'customer', uid, teks, now_ms()))
     return ok(None, 201)
 
 
