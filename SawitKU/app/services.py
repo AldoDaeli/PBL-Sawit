@@ -42,3 +42,23 @@ def sapu(db, paksa=False):
 def hitung_rating(db, produk_id):
     db.run('UPDATE produk SET rating=(SELECT ROUND(AVG(rating),1) FROM ulasan WHERE produk_id=%s) WHERE id=%s',
            (produk_id, produk_id))
+
+
+def lunas(db, o, metode):
+    """Pembayaran sah (disetujui admin / lunas di Midtrans): pesanan masuk 'diproses', terjual bertambah. Idempoten."""
+    if o['status'] not in ('menunggu_bayar', 'menunggu_verifikasi'): return False
+    now = now_ms()
+    db.run('UPDATE pesanan SET status=%s, alasan=%s, metode=%s, t_bayar=COALESCE(t_bayar,%s), t_proses=%s WHERE id=%s',
+           ('diproses', '', metode, now, now, o['id']))
+    for i in db.all('SELECT produk_id, qty FROM pesanan_item WHERE pesanan_id=%s', (o['id'],)):
+        if i['produk_id'] is not None: db.run('UPDATE produk SET terjual = terjual + %s WHERE id=%s', (i['qty'], i['produk_id']))
+    return True
+
+
+def lanjutan_ulasan(db, ids):
+    """{ulasan_id: [balasan lanjutan berurutan]} dalam satu query."""
+    if not ids: return {}
+    out = {}
+    for x in db.all(f"SELECT * FROM ulasan_balas WHERE ulasan_id IN ({','.join(['%s'] * len(ids))}) ORDER BY id", list(ids)):
+        out.setdefault(x['ulasan_id'], []).append(x)
+    return out
