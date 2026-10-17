@@ -48,5 +48,8 @@ class Config:
     SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
     SMTP_FROM = os.getenv('SMTP_FROM', '').strip() or os.getenv('SMTP_USER', '').strip()
     SMTP_MODE = os.getenv('SMTP_MODE', 'starttls').strip().lower()   # starttls (587) | ssl (465) | none
+    # Midtrans (virtual account). Kosong = tombol "Bayar via Virtual Account" dinonaktifkan; QRIS manual tetap jalan.
+    MIDTRANS_SERVER_KEY = os.getenv('MIDTRANS_SERVER_KEY', '').strip()
+    MIDTRANS_PRODUKSI = os.getenv('MIDTRANS_PRODUKSI', '0').strip() == '1'      # 0 = sandbox, 1 = produksi
     SWEEP_INTERVAL_MS = 10_000
     MAX_CONTENT_LENGTH = 6 * 1024 * 1024
