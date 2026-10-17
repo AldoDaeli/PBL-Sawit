@@ -57,6 +57,29 @@ def kirim_kode(email, username, kode, perihal='pendaftaran'):
     _kirim(m, f'{email} -> kode {kode} ({perihal})')
 
 
+def kirim_reset(email, username, kode):
+    """Kode OTP untuk mengatur ulang password."""
+    m = EmailMessage()
+    m['Subject'] = f'Kode reset password SawitKu: {kode}'
+    m['To'] = email
+    m.set_content(
+        f"Halo {username},\n\nKami menerima permintaan mengatur ulang password akun SawitKu kamu. Kode verifikasinya:\n\n    {kode}\n\n"
+        f"Kode berlaku {current_app.config['OTP_MENIT']} menit. Jangan bagikan kode ini kepada siapa pun.\n\n"
+        f"Jika bukan kamu yang memintanya, abaikan email ini; password kamu tidak berubah.\n\nSawitKu")
+    _kirim(m, f'{email} -> kode {kode} (reset password)')
+
+
+def kirim_info_password_diubah(email, username):
+    """Pemberitahuan password berhasil diubah (upaya terbaik)."""
+    m = EmailMessage()
+    m['Subject'] = 'Password akun SawitKu kamu diubah'
+    m['To'] = email
+    m.set_content(f"Halo {username},\n\nPassword akun SawitKu kamu baru saja diubah lewat fitur lupa password. Semua sesi login lama sudah dikeluarkan.\n\n"
+                  f"Jika ini bukan kamu, segera hubungi admin SawitKu.\n\nSawitKu")
+    try: _kirim(m, f'{email}: password diubah')
+    except ApiError: pass
+
+
 def kirim_info_email_diganti(email_lama, username, email_baru):
     """Pemberitahuan ke email LAMA bahwa email akun diganti (upaya terbaik: gagal kirim tidak membatalkan penggantian)."""
     m = EmailMessage()
