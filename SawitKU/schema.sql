@@ -68,6 +68,18 @@ CREATE TABLE IF NOT EXISTS pesanan (
   kode_pos VARCHAR(10) NOT NULL DEFAULT '',
   dibuat BIGINT NOT NULL,
   batas_bayar BIGINT NOT NULL,
+  -- Pembayaran ditolak admin: pesanan kembali 'menunggu_bayar' (bukan dibatalkan) agar bukti bisa diunggah ulang; ditolak = berapa kali
+  ditolak INT NOT NULL DEFAULT 0,
+  -- Pengiriman & pelacakan
+  kurir VARCHAR(30) NULL,
+  resi VARCHAR(40) NULL,
+  t_bayar BIGINT NULL,
+  t_proses BIGINT NULL,
+  t_kirim BIGINT NULL,
+  t_selesai BIGINT NULL,
+  -- Midtrans (virtual account): order_id unik per percobaan bayar; metode = 'qris' (manual) | 'midtrans'
+  metode VARCHAR(12) NULL,
+  midtrans_id VARCHAR(50) NULL,
   FOREIGN KEY (user_id) REFERENCES pengguna (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE INDEX IF NOT EXISTS idx_pesanan_user ON pesanan (user_id, dibuat);
@@ -169,3 +181,38 @@ CREATE TABLE IF NOT EXISTS chat_pesan (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE INDEX IF NOT EXISTS idx_chat_user ON chat_pesan (user_id, id);
 CREATE INDEX IF NOT EXISTS idx_chat_belum ON chat_pesan (dari, dibaca, user_id);
+
+
+-- Gambar unggahan (foto produk, bukti bayar, foto profil) disimpan di database, bukan di disk server:
+-- hosting yang berkas lokalnya hilang saat restart/redeploy tidak lagi membuat gambar lenyap.
+CREATE TABLE IF NOT EXISTS media (
+  folder VARCHAR(10) NOT NULL,
+  nama VARCHAR(40) NOT NULL,
+  data LONGBLOB NOT NULL,
+  dibuat BIGINT NOT NULL,
+  PRIMARY KEY (folder, nama)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Balasan lanjutan di bawah ulasan (admin membalas -> pemilik ulasan membalas balik -> dst.). Balasan pertama admin tetap di ulasan.balasan_teks.
+CREATE TABLE IF NOT EXISTS ulasan_balas (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  ulasan_id INT NOT NULL,
+  dari VARCHAR(8) NOT NULL,
+  user_id INT NULL,
+  teks VARCHAR(300) NOT NULL,
+  dibuat BIGINT NOT NULL,
+  FOREIGN KEY (ulasan_id) REFERENCES ulasan (id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES pengguna (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE INDEX IF NOT EXISTS idx_ulasan_balas ON ulasan_balas (ulasan_id, id);
+
+-- Lupa password: kode OTP reset yang dikirim ke email akun (satu baris per email; kode disimpan sebagai hash + garam).
+CREATE TABLE IF NOT EXISTS otp_reset (
+  email VARCHAR(100) NOT NULL PRIMARY KEY,
+  kode_hash CHAR(64) NOT NULL,
+  garam CHAR(32) NOT NULL,
+  kedaluwarsa BIGINT NOT NULL,
+  salah INT NOT NULL DEFAULT 0,
+  kirim_n INT NOT NULL DEFAULT 1,
+  kirim_terakhir BIGINT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
