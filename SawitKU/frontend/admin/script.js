@@ -36,12 +36,14 @@ document.addEventListener('click', e => {
   const t = e.target.closest('[data-aksi="tabPesan"]'); if (t) { tabPesan = t.dataset.v; R.pesan().catch(er => Toast.err(er.message)); }
 });
 
+let lacakAwal = '';
 const R = {
+  async lacak() { const k = lacakAwal; lacakAwal = ''; Lacak.pasang($('#lacak-root'), k); },
   async ringkasan() {
     const [os, ps, pengguna] = await Promise.all([Api.adminPesanan(), Api.produk(), Api.penggunaAll()]), akt = os.filter(o => o.status === 'menunggu_bayar').length;
-    const pend = os.filter(laku).reduce((a, o) => a + o.total, 0), tolak = os.filter(o => o.status === 'dibatalkan' && /bukti|tidak sesuai/i.test(o.alasan)).length;
+    const pend = os.filter(laku).reduce((a, o) => a + o.total, 0), tolak = os.filter(o => o.ditolak > 0).length;
     $('#r-stat').innerHTML = [['g1', 'Total Pendapatan', pend, 'dari pembayaran disetujui', 1], ['g2', 'Produk Terjual', os.filter(laku).reduce((a, o) => a + o.items.reduce((x, i) => x + i.qty, 0), 0), 'dari pesanan yang dibayar'], ['g3', 'Total Stok', ps.reduce((a, p) => a + p.stok, 0), `${ps.length} jenis produk`], ['g4', 'Pengguna Terdaftar', pengguna.length, 'akun customer'],
-      ['g2', 'Checkout Berjalan', akt, 'belum dibayar'], ['g3', 'Menunggu Persetujuan', os.filter(o => o.status === 'menunggu_verifikasi').length, 'perlu diverifikasi'], ['g1', 'Pembayaran Ditolak', tolak, 'bukti tidak sesuai'], ['g4', 'Total Pesanan', os.length, 'semua status']]
+      ['g2', 'Checkout Berjalan', akt, 'belum dibayar'], ['g3', 'Menunggu Persetujuan', os.filter(o => o.status === 'menunggu_verifikasi').length, 'perlu diverifikasi'], ['g1', 'Pembayaran Ditolak', tolak, 'pernah ditolak (bisa unggah ulang)'], ['g4', 'Total Pesanan', os.length, 'semua status']]
       .map(([k, j, n, ket, u], i) => statCard(k, j, n, ket, i, u)).join('');
     hitungAngka($('#r-stat')); this.tren(os);
     const jual = {}; os.filter(laku).forEach(o => o.items.forEach(i => jual[i.nama] = (jual[i.nama] || 0) + i.qty)); const top = Object.entries(jual).sort((x, y) => y[1] - x[1]).slice(0, 6);
@@ -72,7 +74,11 @@ const R = {
       <p class="text-sm text-slate-600 mt-2">${o.items.map(x => `${K.esc(x.nama)} x${x.qty}`).join(', ')}</p><div class="flex flex-wrap items-center justify-between gap-2 mt-3"><b class="text-brand-700 text-lg">${rp(o.total)}</b><div class="flex gap-2">
       ${o.bukti ? `<button class="btn btn-o" data-aksi="bukti" data-id="${o.id}">Lihat Bukti</button>` : ''}
       ${o.status === 'menunggu_verifikasi' ? `<button class="btn btn-d" data-aksi="tolak" data-id="${o.id}">Tolak</button><button class="btn btn-p" data-aksi="setuju" data-id="${o.id}">Setujui</button>` : ''}
+      ${['dikirim', 'selesai'].includes(o.status) ? `<button class="btn btn-o" data-aksi="lacak" data-id="${o.id}">Lacak</button>` : ''}
       ${o.status === 'diproses' ? `<button class="btn btn-p" data-aksi="kirim" data-id="${o.id}">Tandai Dikirim</button>` : ''}</div></div>
+      ${o.resi ? `<p class="mt-2 text-sm rounded-xl bg-violet-50 text-violet-700 px-3 py-2">${K.esc(o.kurir)} &middot; Resi <b class="select-all">${K.esc(o.resi)}</b></p>` : ''}
+      ${o.metode === 'midtrans' && o.status !== 'menunggu_bayar' ? `<p class="mt-2 text-xs text-sky-700">Dibayar via Virtual Account (Midtrans), terverifikasi otomatis.</p>` : ''}
+      ${o.status === 'menunggu_bayar' && o.ditolak ? `<p class="mt-2 text-xs text-rose-600">Pembayaran ditolak (${o.ditolak}x): ${K.esc(o.alasan)}. Menunggu pembeli mengunggah ulang bukti.</p>` : ''}
       ${o.pengiriman ? `<div class="mt-3 rounded-xl bg-brand-50 px-3 py-2 text-sm"><b class="text-brand-700 text-xs">ALAMAT PENGIRIMAN</b><p class="mt-0.5">${K.esc(o.pengiriman.penerima)} &middot; ${K.esc(o.pengiriman.telepon)}</p><p class="text-slate-600">${K.esc(o.pengiriman.alamat)}, ${K.esc(o.pengiriman.kota)} ${K.esc(o.pengiriman.kodePos)}</p></div>` : ''}
       ${o.alasan && o.status === 'dibatalkan' ? `<p class="mt-2 text-xs text-rose-600">Alasan: ${K.esc(o.alasan)}</p>` : ''}</article>`).join('') || kosong('Tidak ada transaksi.');
   },
@@ -83,10 +89,10 @@ const R = {
   },
   async ulasan() {
     $('#ul-tab').innerHTML = tab({ belum: 'Belum Dibalas', sudah: 'Sudah Dibalas', semua: 'Semua' }, filterUlasan, 'tabUlasan');
-    const l = (await Api.ulasanAll()).filter(u => filterUlasan === 'semua' || (filterUlasan === 'sudah') === !!u.balasan);
+    const l = (await Api.ulasanAll()).filter(u => filterUlasan === 'semua' || (filterUlasan === 'sudah') === !Balasan.perluAdmin(u));
     $('#ul-isi').innerHTML = l.map((u, i) => `<article class="panel baris" style="animation-delay:${i * 50}ms"><div class="flex justify-between gap-2"><div><b>${K.esc(u.nama)}</b><p class="text-xs text-slate-500">${K.esc(u.produk)} &middot; ${tgl(u.dibuat)}</p></div>${bintang(u.rating)}</div><p class="text-sm text-slate-600 mt-3">${K.esc(u.teks)}</p>
-      ${u.balasan ? `<div class="mt-3 rounded-xl bg-brand-50 border-l-4 border-brand-500 px-3 py-2 text-sm"><b class="text-brand-700 text-xs">Komentar Admin &middot; ${tgl(u.balasan.dibuat)}</b><p class="text-slate-600 mt-0.5">${K.esc(u.balasan.teks)}</p></div>` : ''}
-      <div class="flex justify-end mt-4"><button class="btn btn-p" data-aksi="balas" data-id="${u.id}">${u.balasan ? 'Ubah Komentar' : 'Beri Komentar'}</button></div></article>`).join('') || kosong('Tidak ada ulasan.');
+      ${Balasan.html(u, u.nama)}
+      <div class="flex justify-end mt-4">${Balasan.perluAdmin(u) ? `<button class="btn btn-p" data-aksi="balas" data-id="${u.id}">${u.lanjutan.length ? 'Balas Pelanggan' : (u.balasan ? 'Ubah Komentar' : 'Beri Komentar')}</button>` : '<span class="text-xs text-slate-400">Menunggu balasan pelanggan</span>'}</div></article>`).join('') || kosong('Tidak ada ulasan.');
   },
   async pesan() {
     $('#ps-tab').innerHTML = tab({ chat: 'Chat Pelanggan', tamu: 'Pesan Tamu' }, tabPesan, 'tabPesan');
@@ -117,11 +123,18 @@ async function formProduk(id) {
 }
 async function balas(id) {
   const r = (await Api.ulasanAll()).find(x => x.id === id); if (!r) return Toast.err('Ulasan tidak ditemukan.');
-  const m = Modal.buka(`<div class="p-6"><h2 class="font-extrabold text-lg">Komentar untuk ${K.esc(r.nama)}</h2><p class="text-sm text-slate-500 mt-1 mb-3">Ulasan: ${K.esc(r.teks)}</p><textarea id="bl" rows="4" maxlength="300" class="in !h-auto py-2" placeholder="Tulis komentar untuk pembeli...">${K.esc(r.balasan ? r.balasan.teks : '')}</textarea><p id="bl-err" class="text-sm text-rose-600 min-h-5" role="alert"></p><div class="flex justify-end gap-2 mt-2"><button data-tutup class="btn btn-o">Batal</button><button id="bl-ok" class="btn btn-p">Kirim Komentar</button></div></div>`, 'max-w-md');
+  const m = Modal.buka(`<div class="p-6"><h2 class="font-extrabold text-lg">${r.lanjutan.length ? 'Balas' : 'Komentar untuk'} ${K.esc(r.nama)}</h2><p class="text-sm text-slate-500 mt-1 mb-3">Ulasan: ${K.esc(r.teks)}</p><textarea id="bl" rows="4" maxlength="300" class="in !h-auto py-2" placeholder="Tulis komentar untuk pembeli...">${K.esc(r.balasan ? r.balasan.teks : '')}</textarea><p id="bl-err" class="text-sm text-rose-600 min-h-5" role="alert"></p><div class="flex justify-end gap-2 mt-2"><button data-tutup class="btn btn-o">Batal</button><button id="bl-ok" class="btn btn-p">Kirim Komentar</button></div></div>`, 'max-w-md');
   $('#bl-ok', m).onclick = async () => { try { await Api.ulasanBalas(id, $('#bl', m).value); m.tutup(); Toast.ok('Komentar terkirim.'); R.ulasan(); } catch (x) { $('#bl-err', m).textContent = x.message; } };
 }
+function kirim(id) {
+  const m = Modal.buka(`<div class="p-6"><h2 class="font-extrabold text-lg">Kirim Pesanan #${id}</h2><p class="text-sm text-slate-500 mt-1">Isi kurir dan nomor resi. Pembeli bisa melacak paket dengan nomor ini.</p>
+    <label class="text-sm font-semibold mt-3 block" for="kr-kurir">Kurir</label><input id="kr-kurir" class="in mt-1" maxlength="30" list="kr-daftar" placeholder="JNE, J&T, SiCepat, ..." autocomplete="off"><datalist id="kr-daftar"><option>JNE</option><option>J&T</option><option>SiCepat</option><option>AnterAja</option><option>POS Indonesia</option><option>Ninja Xpress</option></datalist>
+    <label class="text-sm font-semibold mt-3 block" for="kr-resi">Nomor resi</label><input id="kr-resi" class="in mt-1 uppercase" maxlength="40" autocomplete="off"><p id="kr-err" class="text-sm text-rose-600 min-h-5 mt-2" role="alert"></p>
+    <div class="flex justify-end gap-2 mt-2"><button data-tutup class="btn btn-o">Batal</button><button id="kr-ok" class="btn btn-p">Tandai Dikirim</button></div></div>`, 'max-w-md');
+  $('#kr-ok', m).onclick = async () => { try { await Api.kirimPesanan(id, $('#kr-kurir', m).value.trim(), $('#kr-resi', m).value.trim()); m.tutup(); Toast.ok('Pesanan ditandai dikirim.'); R.pembayaran(); } catch (x) { $('#kr-err', m).textContent = x.message; } };
+}
 async function tolak(id) {
-  const m = Modal.buka(`<div class="p-6"><h2 class="font-extrabold text-lg">Tolak Pembayaran #${id}</h2><p class="text-sm text-slate-500 mt-1">Pesanan akan dibatalkan dan stok dikembalikan. Pembeli harus membuat pesanan baru.</p><textarea id="tl" rows="3" maxlength="200" class="in !h-auto py-2 mt-3" placeholder="Alasan penolakan"></textarea><div class="flex justify-end gap-2 mt-4"><button data-tutup class="btn btn-o">Batal</button><button id="tl-ok" class="btn btn-d">Tolak</button></div></div>`, 'max-w-md');
+  const m = Modal.buka(`<div class="p-6"><h2 class="font-extrabold text-lg">Tolak Pembayaran #${id}</h2><p class="text-sm text-slate-500 mt-1">Pesanan tidak dibatalkan: pembeli akan melihat alasanmu dan diminta mengunggah ulang bukti bayar.</p><textarea id="tl" rows="3" maxlength="200" class="in !h-auto py-2 mt-3" placeholder="Alasan penolakan"></textarea><div class="flex justify-end gap-2 mt-4"><button data-tutup class="btn btn-o">Batal</button><button id="tl-ok" class="btn btn-d">Tolak</button></div></div>`, 'max-w-md');
   $('#tl-ok', m).onclick = async () => { try { await Api.verifikasi(id, false, $('#tl', m).value.trim()); m.tutup(); Toast.ok('Pembayaran ditolak.'); R.pembayaran(); } catch (x) { Toast.err(x.message); } };
 }
 document.addEventListener('click', async e => {
@@ -132,7 +145,8 @@ document.addEventListener('click', async e => {
     case 'hapusProduk': if (await Modal.konfirmasi('Hapus produk ini secara permanen?', 'Hapus')) { await Api.produkHapus(id); Toast.ok('Produk dihapus.'); R.produk(); } break;
     case 'bukti': { const o = (await Api.adminPesanan()).find(x => x.id === id); if (!o) break; Modal.buka(`<div class="p-4"><img class="w-full rounded-xl" src="${K.url(o.bukti)}" alt="Bukti pembayaran"><button data-tutup class="btn btn-o w-full mt-3">Tutup</button></div>`, 'max-w-md'); break; }
     case 'setuju': if (await Modal.konfirmasi('Bukti sesuai? Pesanan akan diproses untuk pengiriman.', 'Setujui')) { await Api.verifikasi(id, true); Toast.ok('Pembayaran disetujui.'); R.pembayaran(); } break;
-    case 'tolak': tolak(id); break; case 'kirim': await Api.kirimPesanan(id); Toast.ok('Pesanan ditandai dikirim.'); R.pembayaran(); break;
+    case 'tolak': tolak(id); break; case 'kirim': kirim(id); break;
+    case 'lacak': lacakAwal = String(id); if (location.hash === '#lacak') R.lacak(); else location.hash = '#lacak'; break;
     case 'toggleUser': await Api.penggunaToggle(id); R.pengguna(); break;
     case 'balas': balas(id); break; } }
   catch (er) { Toast.err(er.message); }
@@ -140,7 +154,7 @@ document.addEventListener('click', async e => {
 $('#pr-baru').onclick = () => formProduk(); $('#pr-cari').oninput = e => { cari = e.target.value.slice(0, 60); R.produk(); };
 (async () => {
   user = await Sesi.wajib('admin'); if (!user) return;
-  $('#app').hidden = false; $('#logo').innerHTML = I('leaf', 'w-6 h-6'); $('#ikon-menu').innerHTML = I('menu');
+  $('#app').hidden = false; $('#ikon-menu').innerHTML = I('menu');
   $$('.nav-item').forEach(a => { const s = a.querySelector('.ic') || a.querySelector('[data-ikon]'); if (s) s.innerHTML = I(a.dataset.ikon || 'out'); });
   Dash.init(R, user);
   lencanaA = Chat.lencana('pesan', () => Api.adminChatBelum());
