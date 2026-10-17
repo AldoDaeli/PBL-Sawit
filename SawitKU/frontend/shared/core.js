@@ -106,6 +106,8 @@ const Api = {
   /* pendaftaran 2 langkah: daftar -> kode OTP dikirim ke email -> verifikasiOtp membuat akun */
   daftar: ({ username, email, password }) => Api._req('POST', '/auth/daftar', { username, email, password }, { diam: true }),   // -> {email, berlaku, jeda}
   verifikasiOtp: (email, kode) => Api._req('POST', '/auth/daftar/verifikasi', { email, kode }, { diam: true }),
+  lupaKirim: email => Api._req('POST', '/auth/lupa', { email }, { diam: true }),
+  lupaReset: (email, kode, password) => Api._req('POST', '/auth/lupa/reset', { email, kode, password }, { diam: true }),
   kirimUlangOtp: email => Api._req('POST', '/auth/daftar/kirim-ulang', { email }, { diam: true }),
   /* chat pelanggan <-> admin (diam: galat polling tidak memicu keluar otomatis; komponen Chat yang menanganinya) */
   chat: p => Api._req('GET', '/chat' + qs(p), undefined, { diam: true }),
@@ -146,7 +148,11 @@ const Api = {
   /* --- admin --- */
   adminPesanan: () => Api._req('GET', '/admin/pesanan'),
   verifikasi: (id, setuju, alasan) => Api._req('POST', `/admin/pesanan/${id}/verifikasi`, { setuju: !!setuju, alasan }),
-  kirimPesanan: id => Api._req('POST', `/admin/pesanan/${id}/kirim`),
+  kirimPesanan: (id, kurir, resi) => Api._req('POST', `/admin/pesanan/${id}/kirim`, { kurir, resi }),
+  lacak: kode => Api._req('GET', '/lacak?kode=' + encodeURIComponent(kode)),
+  midtransBuat: id => Api._req('POST', `/pesanan/${id}/midtrans`),
+  midtransCek: id => Api._req('POST', `/pesanan/${id}/midtrans/cek`),
+  balasUlasan: (id, teks) => Api._req('POST', `/ulasan/${id}/balas`, { teks }),
   produkSimpan(f) {
     const b = { nama: f.nama, kategori: f.kategori, harga: f.harga, stok: f.stok, gambar: f.gambar, deskripsi: f.deskripsi, spek: f.spek, bestSeller: !!f.bestSeller };
     return f.id ? this._req('PUT', '/admin/produk/' + f.id, b) : this._req('POST', '/admin/produk', b);
@@ -299,3 +305,34 @@ const QR = seed => { let s = seed * 9301 + 49297, r = () => (s = (s * 9301 + 492
   for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (!f(x, y) && r() > .5) c += `<rect x="${x}" y="${y}" width="1" height="1"/>`;
   const fp = (x, y) => `<rect x="${x}" y="${y}" width="7" height="7" fill="none" stroke="#111" stroke-width="1"/><rect x="${x + 2}" y="${y + 2}" width="3" height="3"/>`;
   return `<svg viewBox="-1 -1 27 27" class="w-full h-full" fill="#111" shape-rendering="crispEdges">${c}${fp(.5, .5)}${fp(17.5, .5)}${fp(.5, 17.5)}</svg>`; };
+
+/* ---------- Lacak paket (dipakai dashboard customer & admin): cari nomor pesanan atau resi -> linimasa status ---------- */
+const Lacak = {
+  html(d) {
+    const p = d.pesanan, tl = d.timeline, aktif = tl.findLastIndex(x => x.selesai), batal = p.status === 'dibatalkan';
+    const w = t => t ? new Date(t).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : 'Menunggu';
+    return `<div class="panel space-y-4"><div class="flex flex-wrap justify-between gap-2 items-start"><div><b class="text-lg">Pesanan #${p.id}</b><p class="text-sm text-slate-500">${p.resi ? `${K.esc(p.kurir)} &middot; Resi <b class="text-slate-800 select-all">${K.esc(p.resi)}</b>` : 'Nomor resi belum tersedia (menunggu dikirim)'}</p></div>${badgeStatus(p.status)}</div>
+      <ol class="relative ml-3 border-l-2 ${batal ? 'border-rose-200' : 'border-brand-100'} space-y-5 py-1">${tl.map((x, i) => `<li class="pl-6 relative"><span class="absolute -left-[13px] top-0 w-6 h-6 rounded-full grid place-items-center text-[11px] font-bold ${x.selesai ? (batal && i === tl.length - 1 ? 'bg-rose-500 text-white' : 'bg-brand-600 text-white') : 'bg-slate-200 text-slate-400'} ${i === aktif && !batal && p.status !== 'selesai' ? 'ring-4 ring-brand-100' : ''}">${x.selesai ? (batal && i === tl.length - 1 ? '✕' : '✓') : i + 1}</span>
+        <p class="font-semibold text-sm ${x.selesai ? '' : 'text-slate-400'}">${K.esc(x.label)}</p><p class="text-xs text-slate-500">${x.selesai ? (x.waktu ? w(x.waktu) : '') : 'Menunggu'}</p></li>`).join('')}</ol>
+      <div class="text-sm text-slate-600 border-t border-slate-100 pt-3">${p.items.map(x => `${K.esc(x.nama)} x${x.qty}`).join(', ')}${p.pengiriman ? `<p class="mt-1 text-xs text-slate-500">Dikirim ke <b>${K.esc(p.pengiriman.penerima)}</b>, ${K.esc(p.pengiriman.alamat)}, ${K.esc(p.pengiriman.kota)} ${K.esc(p.pengiriman.kodePos)}</p>` : ''}</div></div>`;
+  },
+  pasang(root, awal) {
+    root.innerHTML = `<form class="panel flex flex-col sm:flex-row gap-3 max-w-2xl" novalidate><input class="in flex-1" maxlength="40" placeholder="Nomor pesanan (mis. 12) atau nomor resi" aria-label="Nomor pesanan atau resi" autocomplete="off"><button class="btn btn-p">Lacak Paket</button></form><p class="text-sm text-rose-600 min-h-5 mt-2" role="alert"></p><div class="hasil max-w-2xl mt-2"></div>`;
+    const f = $('form', root), inp = $('input', f), err = $('[role=alert]', root), out = $('.hasil', root);
+    const cari = async kode => { err.textContent = ''; out.innerHTML = ''; if (!kode.trim()) { err.textContent = 'Isi nomor pesanan atau nomor resi.'; return; }
+      try { out.innerHTML = Lacak.html(await Api.lacak(kode.trim())); } catch (x) { err.textContent = x.message; } };
+    f.onsubmit = e => { e.preventDefault(); cari(inp.value); };
+    if (awal) { inp.value = awal; cari(awal); }
+  },
+};
+
+/* Percakapan di bawah ulasan: balasan pertama admin + balasan lanjutan (admin <-> pemilik ulasan) */
+const Balasan = {
+  pesan: u => [...(u.balasan ? [{ dari: 'admin', teks: u.balasan.teks, dibuat: u.balasan.dibuat }] : []), ...(u.lanjutan || [])],
+  perluAdmin: u => { const p = Balasan.pesan(u); return !p.length || p[p.length - 1].dari === 'customer'; },
+  html(u, namaPemilik) {
+    return Balasan.pesan(u).map(x => x.dari === 'admin'
+      ? `<div class="mt-3 rounded-xl bg-brand-50 border-l-4 border-brand-500 px-3 py-2 text-sm"><b class="text-brand-700 text-xs">Admin &middot; ${tgl(x.dibuat)}</b><p class="text-slate-600 mt-0.5">${K.esc(x.teks)}</p></div>`
+      : `<div class="mt-3 ml-6 rounded-xl bg-slate-50 border-l-4 border-sun-400 px-3 py-2 text-sm"><b class="text-slate-600 text-xs">${K.esc(namaPemilik)} &middot; ${tgl(x.dibuat)}</b><p class="text-slate-600 mt-0.5">${K.esc(x.teks)}</p></div>`).join('');
+  },
+};
