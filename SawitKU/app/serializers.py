@@ -14,14 +14,18 @@ def produk_out(p):
             'terjual': p['terjual'], 'rating': float(p['rating']), 'bestSeller': bool(p['best_seller']),
             'gambar': url_keluar(p['gambar']), 'deskripsi': p['deskripsi'], 'spesifikasi': spek, 'dibuat': p['dibuat']}
 
-def ulasan_out(r):
+def ulasan_out(r, lanjutan=None):
+    """lanjutan = balasan lanjutan (admin <-> pemilik ulasan) berurutan; balasan pertama admin tetap di `balasan`."""
     return {'id': r['id'], 'produkId': r['produk_id'], 'userId': r['user_id'], 'nama': r['nama'],
             'rating': r['rating'], 'teks': r['teks'], 'dibuat': r['dibuat'],
-            'balasan': {'teks': r['balasan_teks'], 'dibuat': r['balasan_dibuat']} if r['balasan_teks'] else None}
+            'balasan': {'teks': r['balasan_teks'], 'dibuat': r['balasan_dibuat']} if r['balasan_teks'] else None,
+            'lanjutan': [{'dari': x['dari'], 'teks': x['teks'], 'dibuat': x['dibuat']} for x in (lanjutan or [])]}
 
 def pesanan_out(o, items):
     return {'id': o['id'], 'userId': o['user_id'], 'total': o['total'], 'status': o['status'],
             'bukti': url_keluar(o['bukti']), 'alasan': o['alasan'], 'dibuat': o['dibuat'], 'batasBayar': o['batas_bayar'],
+            'ditolak': o.get('ditolak') or 0, 'kurir': o.get('kurir') or '', 'resi': o.get('resi') or '', 'metode': o.get('metode') or '',
+            'waktu': {'bayar': o.get('t_bayar'), 'proses': o.get('t_proses'), 'kirim': o.get('t_kirim'), 'selesai': o.get('t_selesai')},
             'pengiriman': ({'penerima': o['penerima'], 'telepon': o['telepon'], 'alamat': o['alamat'], 'kota': o['kota'], 'kodePos': o['kode_pos']}
                            if o.get('alamat') else None),
             'items': [{'produkId': i['produk_id'], 'nama': i['nama'], 'gambar': url_keluar(i['gambar']),
