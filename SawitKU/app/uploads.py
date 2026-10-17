@@ -3,6 +3,8 @@ import base64, io, os, re, secrets
 from flask import current_app
 from PIL import Image, ImageOps
 from .errors import ApiError
+from .db import get_db
+from .security import now_ms
 
 _HEADER = {'data:image/jpeg;base64', 'data:image/png;base64', 'data:image/webp;base64'}
 MEDIA_RE = re.compile(r'^/media/(produk|bukti|foto)/[0-9a-f]{32}\.jpg$')
@@ -50,10 +52,20 @@ def simpan_data_url(data_url, folder, sisi=1200):
         im = im.convert('RGB')
     im.thumbnail((sisi, sisi))
     nama = secrets.token_hex(16) + '.jpg'
-    folder_path = os.path.join(current_app.config['UPLOAD_DIR'], folder)
-    os.makedirs(folder_path, exist_ok=True)
-    im.save(os.path.join(folder_path, nama), 'JPEG', quality=85, optimize=True)
+    buf = io.BytesIO(); im.save(buf, 'JPEG', quality=85, optimize=True)
+    # Disimpan di database (bukan disk): tetap ada walau server di-restart/redeploy atau berjalan lebih dari satu instance.
+    get_db().run('INSERT INTO media (folder,nama,data,dibuat) VALUES (%s,%s,%s,%s)', (folder, nama, buf.getvalue(), now_ms()))
     return f'/media/{folder}/{nama}'
+
+
+def baca_media(folder, nama):
+    """Isi gambar (bytes) dari database; berkas lama di disk (sebelum pindah ke database) tetap terbaca."""
+    r = get_db().one('SELECT data FROM media WHERE folder=%s AND nama=%s', (folder, nama))
+    if r: return bytes(r['data'])
+    p = os.path.join(current_app.config['UPLOAD_DIR'], folder, nama)
+    if os.path.isfile(p):
+        with open(p, 'rb') as f: return f.read()
+    return None
 
 
 def media_dipakai(db, path):
@@ -64,9 +76,11 @@ def media_dipakai(db, path):
 
 
 def hapus_media(path, db=None):
-    """Hapus berkas unggahan. Bila `db` diberikan, berkas yang masih dirujuk (mis. riwayat pesanan) dibiarkan."""
+    """Hapus gambar unggahan. Bila `db` diberikan, gambar yang masih dirujuk (mis. riwayat pesanan) dibiarkan."""
     if isinstance(path, str) and MEDIA_RE.match(path) and not (db is not None and media_dipakai(db, path)):
-        try: os.remove(os.path.join(current_app.config['UPLOAD_DIR'], path[len('/media/'):]))
+        folder, nama = path[len('/media/'):].split('/')
+        (db or get_db()).run('DELETE FROM media WHERE folder=%s AND nama=%s', (folder, nama))
+        try: os.remove(os.path.join(current_app.config['UPLOAD_DIR'], folder, nama))     # sisa berkas lama di disk (bila ada)
         except OSError: pass
 
 
