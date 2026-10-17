@@ -4,7 +4,7 @@ from .db import connect
 from .security import hash_pw, now_ms
 from .validators import username_ok, email_ok, password_ok
 
-TABEL = ['sesi', 'gagal_login', 'otp_daftar', 'otp_email', 'ulasan', 'favorit', 'keranjang', 'pesanan_item', 'pesanan', 'pesan_kontak', 'chat_pesan', 'produk', 'pengguna']
+TABEL = ['otp_reset', 'ulasan_balas', 'media', 'sesi', 'gagal_login', 'otp_daftar', 'otp_email', 'ulasan', 'favorit', 'keranjang', 'pesanan_item', 'pesanan', 'pesan_kontak', 'chat_pesan', 'produk', 'pengguna']
 
 
 def daftarkan(app):
@@ -17,8 +17,32 @@ def daftarkan(app):
         for stmt in (s.strip() for s in teks.split(';')):
             if stmt:
                 db.run(stmt)
-        db.commit(); db.close()
+        db.commit()
+        # Database lama: tambahkan kolom baru di tabel pesanan (tracking resi, tolak/unggah ulang, Midtrans). Sudah ada = dilewati.
+        for kolom in ('ditolak INT NOT NULL DEFAULT 0', 'kurir VARCHAR(30) NULL', 'resi VARCHAR(40) NULL', 't_bayar BIGINT NULL', 't_proses BIGINT NULL',
+                      't_kirim BIGINT NULL', 't_selesai BIGINT NULL', 'metode VARCHAR(12) NULL', 'midtrans_id VARCHAR(50) NULL'):
+            try: db.run(f'ALTER TABLE pesanan ADD COLUMN {kolom}'); db.commit()
+            except Exception as e:
+                db.rollback()
+                if not any(k in str(e) for k in ('1060', 'Duplicate column')): raise
+        db.close()
         click.echo('Tabel siap.')
+
+    @app.cli.command('impor-media')
+    def impor_media():
+        """Pindahkan gambar lama di folder uploads/ ke database (sekali saja setelah upgrade; aman diulang)."""
+        import time
+        akar, n = app.config['UPLOAD_DIR'], 0
+        db = connect()
+        for folder in ('produk', 'bukti', 'foto'):
+            d = os.path.join(akar, folder)
+            if not os.path.isdir(d): continue
+            for nama in os.listdir(d):
+                if not nama.endswith('.jpg') or db.one('SELECT 1 AS x FROM media WHERE folder=%s AND nama=%s', (folder, nama)): continue
+                with open(os.path.join(d, nama), 'rb') as f:
+                    db.run('INSERT INTO media (folder,nama,data,dibuat) VALUES (%s,%s,%s,%s)', (folder, nama, f.read(), int(time.time() * 1000))); n += 1
+        db.commit(); db.close()
+        click.echo(f'{n} gambar dipindahkan ke database.')
 
     @app.cli.command('seed')
     @click.option('--riwayat/--tanpa-riwayat', default=True, help='Tambahkan riwayat pesanan ±4 bulan untuk grafik.')
