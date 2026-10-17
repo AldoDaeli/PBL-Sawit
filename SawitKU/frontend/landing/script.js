@@ -1,7 +1,7 @@
 'use strict';
 const S = { kat: '', harga: '', rating: 0, urut: 'populer', q: '' };
 // Satu sumber data kontak toko: ganti nomor/email di sini saja (nomor WhatsApp format internasional tanpa + / 0 di depan)
-const KONTAK = { wa: '6281234567890', waTampil: '+62 812-3456-7890', email: 'halo@sawitku.id', jam: 'Senin–Sabtu, 08.00–17.00 WIB' };
+const KONTAK = { wa: '628514731481', waTampil: '+62 851-4731-4821', email: 'pblrkstim042025@gmail.com', jam: 'Senin–Sabtu, 08.00–17.00 WIB' };
 const linkWa = teks => `https://wa.me/${KONTAK.wa}?text=${encodeURIComponent(teks)}`;
 const linkEmail = subjek => `mailto:${KONTAK.email}?subject=${encodeURIComponent(subjek)}`;
 let PRODUK = [], FAV = [];   // hasil satu kali ambil dari server; disaring di sisi klien
@@ -63,7 +63,7 @@ function renderSlider() {
   $('#side-cards').innerHTML = baru.map(({ p, sub }) => `<a href="/produk/${p.id}" class="group relative overflow-hidden rounded-3xl bg-brand-50 p-6 flex items-center min-h-[180px] hover:bg-brand-100 transition"><div class="relative z-10 w-3/5"><p class="text-xs font-bold text-brand-600 uppercase tracking-wide">${sub}</p><h3 class="text-xl font-extrabold text-brand-700 mt-1 line-clamp-2">${K.esc(p.nama)}</h3><p class="mt-2 font-bold">${rp(p.harga)}</p><span class="inline-block mt-3 text-sm font-semibold text-brand-700 border border-brand-600 rounded-full px-4 py-1.5 group-hover:bg-brand-600 group-hover:text-white transition">Lihat Produk</span></div><img class="absolute right-0 top-0 h-full w-2/5 object-cover [mask-image:linear-gradient(to_left,#000_60%,transparent)] group-hover:scale-105 transition duration-500" src="${K.url(p.gambar)}" alt=""></a>`).join('');
 }
 async function init() {
-  $('#logo-ikon').innerHTML = I('leaf', 'w-6 h-6'); $('#btn-cari').innerHTML = I('search'); $('#ikon-cart').innerHTML = I('cart', 'w-[22px] h-[22px]'); $('#btn-fav').insertAdjacentHTML('afterbegin', I('heart', 'w-[22px] h-[22px]'));
+  $('#btn-cari').innerHTML = I('search'); $('#ikon-cart').innerHTML = I('cart', 'w-[22px] h-[22px]'); $('#btn-fav').insertAdjacentHTML('afterbegin', I('heart', 'w-[22px] h-[22px]'));
   $('#btn-menu').innerHTML = I('menu'); $('#ikon-kat').innerHTML = I('menu', 'w-4 h-4'); $('#ikon-tel').innerHTML = I('phone', 'w-6 h-6');
   [['shield', 'Tanaman Sehat Bergaransi'], ['truck', 'Packing Aman ke Seluruh Indonesia'], ['leaf', 'Garansi Hidup 7 Hari']].forEach(([i, t], k) => $('#strip-' + (k + 1)).innerHTML = I(i, 'w-4 h-4') + t);
   $('#fitur').innerHTML = [['leaf', 'Segar dari Kebun', 'Dipilih langsung dan dikirim segar.'], ['shield', 'Garansi Hidup', 'Layu dalam 7 hari, kami ganti.'], ['card', 'Bayar via QRIS', 'Semua e-wallet dan mobile banking.'], ['msg', 'Konsultasi Gratis', 'Tanya cara rawat kapan saja.']]
@@ -119,3 +119,7 @@ function pasangChatKontak() {
   catch (er) { $('#grid-katalog').innerHTML = `<p class="col-span-full text-center text-slate-500 py-16">Gagal memuat produk: ${K.esc(er.message)}</p>`; }
   await init();
 })();
+
+// Tombol kembali ke atas: muncul setelah menggulir; navigasi footer & tombol memakai gulir halus
+(() => { const b = document.getElementById('ke-atas'); if (!b) return; const cek = () => { const turun = scrollY > 600; b.classList.toggle('hidden', !turun); b.classList.toggle('grid', turun); };
+  addEventListener('scroll', cek, { passive: true }); cek(); b.onclick = () => scrollTo({ top: 0, behavior: 'smooth' }); })();

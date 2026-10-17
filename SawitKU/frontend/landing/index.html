@@ -6,6 +6,7 @@
 <!-- 'unsafe-eval' hanya dibutuhkan Tailwind CDN. Hapus saat produksi (build Tailwind CLI). -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="no-referrer">
+<link rel="icon" type="image/png" sizes="32x32" href="/shared/favicon-32.png"><link rel="icon" href="/shared/favicon.ico" sizes="any"><link rel="apple-touch-icon" href="/shared/apple-touch-icon.png">
 <title>SawitKu | Toko Online</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -23,7 +24,7 @@
 
 <header class="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-100">
   <div class="max-w-7xl mx-auto px-4 h-20 flex items-center gap-4">
-    <a href="#beranda" class="flex items-center gap-2 text-2xl font-extrabold text-brand-700"><span class="w-10 h-10 rounded-xl bg-brand-600 text-white grid place-items-center" id="logo-ikon"></span>Sawit<span class="text-sun-500">Ku</span></a>
+    <a href="#beranda" class="flex items-center gap-2 text-2xl font-extrabold text-brand-700"><img src="/shared/logo.png" alt="Logo SawitKu" width="48" height="48" class="w-10 h-10 rounded-xl object-cover shrink-0">Sawit<span class="text-sun-500">Ku</span></a>
     <form id="form-cari" class="flex-1 hidden md:flex max-w-xl mx-auto" role="search">
       <input id="cari" type="search" maxlength="60" placeholder="Cari monstera, kaktus, pot..." aria-label="Cari produk" class="w-full h-11 pl-4 pr-2 rounded-l-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-400 text-sm">
       <button class="h-11 px-4 bg-brand-600 hover:bg-brand-700 text-white rounded-r-xl transition" aria-label="Cari" id="btn-cari"></button>
@@ -97,7 +98,23 @@
 </section>
 </main>
 
-<footer class="bg-brand-900 text-brand-200 text-sm"><div class="max-w-7xl mx-auto px-4 py-8 flex flex-wrap justify-between gap-3"><span>&copy; 2026 SawitKu. PBL RKS Tim 304.</span><span>Tanaman sehat, rumah hangat.</span></div></footer>
+<footer class="bg-brand-900 text-brand-200 text-sm" aria-label="Navigasi bawah">
+  <div class="max-w-7xl mx-auto px-4 pt-12 pb-8 grid gap-10 md:grid-cols-4">
+    <div class="md:col-span-2">
+      <a href="#beranda" class="inline-flex items-center gap-3 text-2xl font-extrabold text-white"><img src="/shared/logo.png" alt="Logo SawitKu" width="48" height="48" class="w-12 h-12 rounded-xl object-cover">Sawit<span class="text-sun-400">Ku</span></a>
+      <p class="mt-4 max-w-sm text-brand-200/90">Belanja produk sawit dan kebutuhan kebunmu dengan mudah: bayar via QRIS atau Virtual Account, lacak paket langsung dari akunmu.</p>
+    </div>
+    <nav aria-label="Jelajahi"><h2 class="text-white font-bold mb-3">Jelajahi</h2><ul class="space-y-2">
+      <li><a class="hover:text-white transition" href="#beranda">Beranda</a></li><li><a class="hover:text-white transition" href="#terlaris">Produk Terlaris</a></li>
+      <li><a class="hover:text-white transition" href="#katalog">Katalog</a></li><li><a class="hover:text-white transition" href="#kontak">Hubungi Kami</a></li></ul></nav>
+    <nav aria-label="Akun"><h2 class="text-white font-bold mb-3">Akun</h2><ul class="space-y-2">
+      <li><a class="hover:text-white transition" href="/masuk">Masuk</a></li><li><a class="hover:text-white transition" href="/daftar">Daftar</a></li>
+      <li><a class="hover:text-white transition" href="/dashboard#pesanan">Pesanan Saya</a></li><li><a class="hover:text-white transition" href="/dashboard#lacak">Lacak Paket</a></li></ul></nav>
+  </div>
+  <div class="border-t border-brand-800"><div class="max-w-7xl mx-auto px-4 py-5 flex flex-wrap items-center justify-between gap-3"><span>&copy; 2026 SawitKu. PBL RKS Tim 304.</span>
+    <a href="#beranda" class="inline-flex items-center gap-2 font-semibold text-white hover:text-sun-400 transition">Kembali ke atas <span aria-hidden="true">&uarr;</span></a></div></div>
+</footer>
+<button id="ke-atas" type="button" aria-label="Kembali ke atas" class="hidden fixed bottom-5 right-5 z-40 w-12 h-12 rounded-full bg-brand-600 hover:bg-brand-700 text-white shadow-lg shadow-brand-900/30 grid place-items-center text-xl transition active:scale-95">&uarr;</button>
 
 <script src="/shared/core.js"></script><script src="/shared/chat.js"></script>
 <script src="/landing/script.js"></script>
