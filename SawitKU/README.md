@@ -7,7 +7,7 @@ Karena semuanya satu origin, tidak perlu CORS.
 sawitku/
 ├── app/            backend Flask (routes, keamanan, upload, seed, CLI)
 ├── frontend/       landing/ produk/ login/ register/ customer/ admin/ shared/   (HTML + JS + CSS)
-├── tests/          uji end-to-end (SQLite, tanpa MariaDB) — 71 tes
+├── tests/          uji end-to-end (SQLite, tanpa MariaDB) — 76 tes
 ├── schema.sql      skema database (dibaca oleh perintah init-db)
 ├── wsgi.py  requirements.txt  .env.example  uploads/
 ```
@@ -149,7 +149,7 @@ Buka **http://localhost:5000** (otomatis ke landing). **Jangan** membuka file `i
 
 ### 8. Tes (opsional, tidak butuh MariaDB)
 ```bash
-python -m unittest discover -s tests -v       # harus: Ran 71 tests ... OK
+python -m unittest discover -s tests -v       # harus: Ran 76 tests ... OK
 ```
 
 ### Bila ada error
@@ -316,6 +316,29 @@ location / { proxy_pass http://127.0.0.1:8000; proxy_set_header Host $host; prox
 limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;   # lalu pasang `limit_req zone=api burst=30;` pada location /api/
 ```
 Sengaja hanya `produk` dan `foto` yang dilayani langsung oleh Nginx; `/media/bukti/` (bukti pembayaran) dibiarkan lewat Flask.
+
+## Revisi terbaru (logo, resi, upload ulang, Midtrans, balasan ulasan)
+
+**Cara upgrade (database sudah ada), urut:**
+```bash
+pip install -r requirements.txt
+flask --app wsgi init-db        # membuat tabel baru (media, ulasan_balas) + menambah kolom baru di tabel pesanan
+flask --app wsgi impor-media    # SEKALI: pindahkan foto lama di folder uploads/ ke database
+python -m unittest discover -s tests    # harus: Ran 76 tests ... OK
+```
+
+| Revisi | Isi |
+|---|---|
+| Foto profil & bukti bayar tidak tampil setelah deploy | Gambar kini disimpan di **tabel `media` (database)**, bukan di disk server. Hosting yang menghapus file lokal saat restart/redeploy (mis. Render/Railway tanpa volume) tidak lagi membuat gambar hilang. `/media/...` tetap URL yang sama. |
+| Logo | Semua ikon daun diganti `frontend/shared/logo.png` (landing, login, daftar, produk, dashboard customer & admin, footer). Favicon tab browser: `favicon.ico`, `favicon-32.png`, `apple-touch-icon.png` di `frontend/shared/`. |
+| Tracking paket | Dashboard customer dan admin: menu **Lacak Paket** (cari nomor pesanan `12`/`#12`/`SK-12` atau nomor resi) dengan linimasa status. Admin wajib mengisi **kurir + resi** saat menandai dikirim (resi unik). Customer hanya bisa melacak pesanannya sendiri. |
+| Pembayaran ditolak | Pesanan **tidak dibatalkan** lagi: kembali ke *Menunggu Pembayaran*, pembeli melihat alasan + teks "Silakan upload ulang bukti bayar" dan tombol **Upload Ulang Bukti**. Batas bayar diperpanjang sebesar `BATAS_BAYAR_JAM`. |
+| Midtrans (Virtual Account) | Tombol **Virtual Account** di Pesanan Saya mengarahkan ke halaman bayar Midtrans (BCA/BNI/BRI/Permata/CIMB/lainnya). Status otomatis `diproses` lewat webhook `POST /api/midtrans/notifikasi` (tanda tangan SHA-512 diverifikasi) dan sinkron saat pembeli kembali ke dashboard. Isi `MIDTRANS_SERVER_KEY` di `.env` (sandbox: `SB-Mid-server-...`) dan set *Payment Notification URL* di dashboard Midtrans ke `https://DOMAINMU/api/midtrans/notifikasi`. Webhook butuh URL publik HTTPS (di localhost pakai ngrok/cloudflared). Kosong = tombol memberi pesan "belum diaktifkan"; QRIS manual tetap jalan. |
+| Navigasi landing | Footer berisi navigasi (Jelajahi, Akun, Lacak Paket) + tombol **Kembali ke atas** yang muncul saat menggulir. |
+| Lupa password | Link **Lupa password?** di halaman masuk menuju `/lupa-password`: masukkan email, terima kode OTP 6 angka (berlaku 10 menit, maks 5 salah, jeda kirim ulang 60 dtk), lalu buat password baru. Respons selalu sama untuk email terdaftar maupun tidak (tidak bisa dipakai menebak akun). Setelah berhasil, semua sesi login lama dikeluarkan, blokir login dibuka, dan email pemberitahuan dikirim. Butuh `SMTP_*` terisi seperti OTP register. Tabel baru `otp_reset` dibuat oleh `init-db`. |
+| Balasan ulasan | Admin membalas, **pemilik ulasan bisa membalas balik** dari halaman produk, bergantian (maks 5 balasan pelanggan per ulasan). Masih versi sederhana. |
+
+Catatan Midtrans: bila pembeli sudah membayar VA tetapi pesanan sempat dibatalkan otomatis (lewat 24 jam), sistem **tidak** mengaktifkannya lagi dan mencatat peringatan di log untuk penanganan manual.
 
 ## Upgrade dari versi lama (database sudah ada)
 
