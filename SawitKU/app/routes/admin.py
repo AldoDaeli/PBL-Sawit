@@ -6,8 +6,10 @@ from ..db import get_db
 from ..errors import ApiError
 from ..security import now_ms, wajib
 from ..serializers import user_out, produk_out, ulasan_out
-from ..services import sapu, muat_pesanan, batalkan
+from ..services import sapu, muat_pesanan, batalkan, lunas, lanjutan_ulasan
 from ..uploads import resolve_gambar, hapus_media
+from flask import current_app, g
+import re
 from ..validators import to_int
 
 
@@ -27,21 +29,28 @@ def verifikasi(oid):
     o = db.one('SELECT * FROM pesanan WHERE id=%s FOR UPDATE', (oid,))
     if not o or o['status'] != 'menunggu_verifikasi': raise ApiError('Pesanan tidak menunggu verifikasi.', 409)
     if b.get('setuju') is True:
-        db.run('UPDATE pesanan SET status=%s WHERE id=%s', ('diproses', oid))
-        for i in db.all('SELECT produk_id, qty FROM pesanan_item WHERE pesanan_id=%s', (oid,)):
-            if i['produk_id'] is not None: db.run('UPDATE produk SET terjual = terjual + %s WHERE id=%s', (i['qty'], i['produk_id']))
+        lunas(db, o, o['metode'] or 'qris')
     else:
-        batalkan(db, o, str(b.get('alasan') or 'Bukti pembayaran tidak sesuai.').strip()[:200] or 'Bukti pembayaran tidak sesuai.')
+        # Ditolak: pesanan TIDAK dibatalkan. Kembali ke 'menunggu_bayar' dengan alasan, supaya pembeli bisa mengunggah ulang bukti.
+        alasan = (str(b.get('alasan') or '').strip()[:200]) or 'Bukti pembayaran tidak sesuai.'
+        now = now_ms()
+        db.run('UPDATE pesanan SET status=%s, alasan=%s, ditolak=ditolak+1, bukti=NULL, t_bayar=NULL, batas_bayar=%s WHERE id=%s',
+               ('menunggu_bayar', alasan, now + current_app.config['BATAS_BAYAR_JAM'] * 3600000, oid))
+        db.commit(); hapus_media(o['bukti'], db)
     return ok()
 
 
 @bp.post('/admin/pesanan/<int:oid>/kirim')
 @wajib('admin')
 def kirim_pesanan(oid):
-    db = get_db()
+    db, b = get_db(), body()
+    kurir, resi = str(b.get('kurir') or '').strip()[:30], re.sub(r'\s', '', str(b.get('resi') or '')).upper()
+    if not 2 <= len(kurir) <= 30: raise ApiError('Isi nama kurir (mis. JNE, J&T, SiCepat).')
+    if not re.fullmatch(r'[A-Z0-9\-]{5,40}', resi): raise ApiError('Nomor resi 5–40 karakter (huruf, angka, strip).')
     o = db.one('SELECT status FROM pesanan WHERE id=%s FOR UPDATE', (oid,))
     if not o or o['status'] != 'diproses': raise ApiError('Pesanan belum siap dikirim.', 409)
-    db.run('UPDATE pesanan SET status=%s WHERE id=%s', ('dikirim', oid))
+    if db.one('SELECT 1 AS x FROM pesanan WHERE resi=%s AND id<>%s', (resi, oid)): raise ApiError('Nomor resi itu sudah dipakai pesanan lain.', 409)
+    db.run('UPDATE pesanan SET status=%s, kurir=%s, resi=%s, t_kirim=%s WHERE id=%s', ('dikirim', kurir, resi, now_ms(), oid))
     return ok()
 
 
@@ -137,17 +146,27 @@ def pengguna_toggle(uid):
 def ulasan_all():
     rows = get_db().all('SELECT r.*, u.username AS nama, p.nama AS produk_nama FROM ulasan r '
                         'JOIN pengguna u ON u.id=r.user_id LEFT JOIN produk p ON p.id=r.produk_id ORDER BY r.dibuat DESC')
-    return ok([{**ulasan_out(r), 'produk': r['produk_nama'] or '-'} for r in rows])
+    lj = lanjutan_ulasan(get_db(), [r['id'] for r in rows])
+    return ok([{**ulasan_out(r, lj.get(r['id'])), 'produk': r['produk_nama'] or '-'} for r in rows])
 
 
 @bp.post('/admin/ulasan/<int:rid>/balas')
 @wajib('admin')
 def ulasan_balas(rid):
+    """Balasan pertama admin disimpan di ulasan (boleh diubah selama pelanggan belum membalas).
+    Setelah pelanggan membalas, balasan admin berikutnya ditambahkan sebagai percakapan lanjutan."""
     db = get_db()
     teks = str(body().get('teks') or '').strip()
-    if not db.one('SELECT id FROM ulasan WHERE id=%s', (rid,)): raise ApiError('Ulasan tidak ditemukan.', 404)
+    r = db.one('SELECT id, balasan_teks FROM ulasan WHERE id=%s FOR UPDATE', (rid,))
+    if not r: raise ApiError('Ulasan tidak ditemukan.', 404)
     if not 3 <= len(teks) <= 300: raise ApiError('Komentar 3–300 karakter.')
-    db.run('UPDATE ulasan SET balasan_teks=%s, balasan_dibuat=%s WHERE id=%s', (teks, now_ms(), rid))
+    lanj = db.all('SELECT dari FROM ulasan_balas WHERE ulasan_id=%s ORDER BY id', (rid,))
+    if not lanj:
+        db.run('UPDATE ulasan SET balasan_teks=%s, balasan_dibuat=%s WHERE id=%s', (teks, now_ms(), rid))
+    elif lanj[-1]['dari'] == 'customer':
+        db.run('INSERT INTO ulasan_balas (ulasan_id,dari,user_id,teks,dibuat) VALUES (%s,%s,%s,%s,%s)', (rid, 'admin', g.user['id'], teks, now_ms()))
+    else:
+        raise ApiError('Tunggu pelanggan membalas dulu.', 409)
     return ok()
 
 
