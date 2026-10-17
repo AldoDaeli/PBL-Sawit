@@ -8,8 +8,9 @@ const statCard = (kls, judul, nilai, ket, i = 0) => `<div class="kartu-stat ${kl
 function hitungAngka(root) { $$('[data-hitung]', root).forEach(e => Animasi.hitung(e, +e.dataset.hitung, e.dataset.rp ? rp : undefined)); }
 async function badgeNav() { const c = await Api.jumlahKeranjang(), a = $('.nav-item[data-sec="keranjang"]'); let p = $('.pin', a); if (!c) return p && p.remove(); if (!p) { p = document.createElement('span'); p.className = 'pin'; a.append(p); } p.textContent = c; }
 
-let chatC = null, lencanaC = null;
+let chatC = null, lencanaC = null, lacakAwal = '';
 const R = {
+  async lacak() { const k = lacakAwal; lacakAwal = ''; Lacak.pasang($('#lacak-root'), k); },
   async pesan() {
     if (chatC) chatC.hentikan();
     chatC = Chat.pasang($('#chat-root'), { saya: 'customer', muat: p => Api.chat(p), kirim: isi => Api.chatKirim(isi), diMuat: () => lencanaC && lencanaC.segarkan() });
@@ -34,7 +35,11 @@ const R = {
   },
   async pesanan() {
     $('#p-tab').innerHTML = tab(kelompok, filterPesanan, 'tabPesanan');
-    const semua = await Api.pesananSaya(), os = semua.filter(o => filterPesanan === 'semua' || STATUS[o.status][1] === filterPesanan);
+    let semua = await Api.pesananSaya();
+    // pembeli baru kembali dari halaman Midtrans: sinkronkan status (webhook tetap jalur utama)
+    const vaMenunggu = semua.filter(o => o.metode === 'midtrans' && o.status === 'menunggu_bayar');
+    if (vaMenunggu.length) { const hs = await Promise.all(vaMenunggu.map(o => Api.midtransCek(o.id).catch(() => ({})))); if (hs.some(h => h.lunas)) { semua = await Api.pesananSaya(); Toast.ok('Pembayaran Virtual Account diterima.'); } }
+    const os = semua.filter(o => filterPesanan === 'semua' || STATUS[o.status][1] === filterPesanan);
     // produk yang sudah diulas (satu permintaan per produk unik dari pesanan selesai)
     const sudah = new Set(), calon = [...new Set(os.filter(o => o.status === 'selesai').flatMap(o => o.items.map(x => x.produkId)).filter(x => x != null))];
     await Promise.all(calon.map(async pid => { if (await Api.sudahUlas(pid)) sudah.add(pid); }));
@@ -44,9 +49,13 @@ const R = {
       <div class="mt-3 divide-y divide-slate-100">${o.items.map(x => `<div class="py-2 flex items-center gap-3"><img class="w-12 h-12 rounded-lg object-cover" src="${K.url(x.gambar)}" alt=""><div class="flex-1 min-w-0 text-sm"><p class="font-semibold truncate">${K.esc(x.nama)}</p><p class="text-slate-500">${x.qty} x ${rp(x.harga)}</p></div>${bisaUlas.includes(x) ? `<button class="btn btn-o !h-8 !text-xs" data-aksi="ulas" data-id="${o.id}" data-p="${x.produkId}">Beri Ulasan</button>` : ''}</div>`).join('')}</div>
       ${tujuanHtml(o)}
       ${o.alasan && o.status === 'dibatalkan' ? `<p class="mt-2 text-sm rounded-xl bg-rose-50 text-rose-700 px-3 py-2">Alasan: ${K.esc(o.alasan)}</p>` : ''}
+      ${o.status === 'menunggu_bayar' && o.ditolak ? `<div class="mt-2 text-sm rounded-xl bg-rose-50 text-rose-700 px-3 py-2" role="alert"><b>Pembayaran ditolak.</b> ${o.alasan ? 'Alasan: ' + K.esc(o.alasan) + '. ' : ''}Silakan upload ulang bukti bayar.</div>` : ''}
       ${o.status === 'menunggu_bayar' ? `<p class="mt-2 text-xs text-amber-700">Bayar sebelum ${new Date(o.batasBayar).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}, jika lewat pesanan otomatis dibatalkan.</p>` : ''}
-      <div class="mt-3 flex flex-wrap items-center justify-between gap-2"><b class="text-brand-700">${rp(o.total)}</b><div class="flex gap-2">
-        ${o.status === 'menunggu_bayar' ? `<button class="btn btn-d" data-aksi="batal" data-id="${o.id}">Batalkan</button><button class="btn btn-p" data-aksi="bayar" data-id="${o.id}">Bayar via QRIS</button>` : ''}
+      ${o.status === 'menunggu_verifikasi' ? `<p class="mt-2 text-xs text-sky-700">Bukti bayar sudah terkirim dan sedang diperiksa admin.</p>` : ''}
+      ${o.resi ? `<p class="mt-2 text-sm rounded-xl bg-violet-50 text-violet-700 px-3 py-2">${K.esc(o.kurir)} &middot; Resi <b class="select-all">${K.esc(o.resi)}</b></p>` : ''}
+      <div class="mt-3 flex flex-wrap items-center justify-between gap-2"><b class="text-brand-700">${rp(o.total)}</b><div class="flex flex-wrap gap-2">
+        ${['diproses', 'dikirim', 'selesai'].includes(o.status) ? `<button class="btn btn-o" data-aksi="lacak" data-id="${o.id}">Lacak Paket</button>` : ''}
+        ${o.status === 'menunggu_bayar' ? `<button class="btn btn-d" data-aksi="batal" data-id="${o.id}">Batalkan</button><button class="btn btn-o" data-aksi="va" data-id="${o.id}">Virtual Account</button><button class="btn btn-p" data-aksi="bayar" data-id="${o.id}">${o.ditolak ? 'Upload Ulang Bukti' : 'Bayar via QRIS'}</button>` : ''}
         ${o.status === 'dikirim' ? `<button class="btn btn-p" data-aksi="terima" data-id="${o.id}">Barang Diterima</button>` : ''}</div></div></article>`;
     }).join('') || kosong('Tidak ada pesanan di kategori ini.');
   },
@@ -88,7 +97,7 @@ function checkoutDenganAlamat() {
 const tujuanHtml = o => o.pengiriman ? `<p class="mt-2 text-xs text-slate-500">Dikirim ke: <b>${K.esc(o.pengiriman.penerima)}</b> &middot; ${K.esc(o.pengiriman.telepon)} &middot; ${K.esc(o.pengiriman.alamat)}, ${K.esc(o.pengiriman.kota)} ${K.esc(o.pengiriman.kodePos)}</p>` : '';
 async function bayar(id) {
   const o = (await Api.pesananSaya()).find(x => x.id === id); if (!o) return Toast.err('Pesanan tidak ditemukan.'); let bukti = null;
-  const m = Modal.buka(`<div class="p-6"><h2 class="font-extrabold text-lg">Pembayaran QRIS #${o.id}</h2><p class="text-sm text-slate-500">Scan kode di bawah lalu bayar sesuai nominal.</p>
+  const m = Modal.buka(`<div class="p-6"><h2 class="font-extrabold text-lg">${o.ditolak ? 'Upload Ulang Bukti Bayar' : 'Pembayaran QRIS'} #${o.id}</h2>${o.ditolak ? `<p class="text-sm rounded-xl bg-rose-50 text-rose-700 px-3 py-2 mt-2">Pembayaran sebelumnya ditolak${o.alasan ? ': ' + K.esc(o.alasan) : ''}. Silakan upload ulang bukti bayar yang benar.</p>` : ''}<p class="text-sm text-slate-500 mt-1">Scan kode di bawah lalu bayar sesuai nominal.</p>
     <div class="mx-auto my-4 w-52 h-52 p-3 rounded-2xl border-2 border-brand-200 bg-white">${QR(o.id + 7)}</div><p class="text-center text-xs text-slate-400 -mt-2 mb-2">QRIS toko (simulasi)</p>
     <p class="text-center text-2xl font-extrabold text-brand-700">${rp(o.total)}</p>
     <label class="block mt-5 text-sm font-semibold">Unggah bukti pembayaran</label><input id="bk-file" type="file" accept="image/jpeg,image/png,image/webp" class="mt-1 w-full text-sm file:mr-3 file:btn file:btn-o file:border-0 file:rounded-xl file:px-3 file:py-2 file:bg-brand-100 file:text-brand-800 file:font-semibold">
@@ -114,7 +123,9 @@ document.addEventListener('click', async e => {
     case 'hapus': await Api.kerHapus(id); R.keranjang(); Toast.ok('Item dihapus.'); break;
     case 'checkout': { const o = await checkoutDenganAlamat(); if (!o) break; user = await Api.saya(true); Toast.ok('Pesanan dibuat. Silakan bayar.'); filterPesanan = 'semua'; location.hash = '#pesanan'; setTimeout(() => bayar(o.id), 300); break; }
     case 'tabPesanan': filterPesanan = v; R.pesanan(); break; case 'rentang': rentang = v; R.statistik(); break;
-    case 'bayar': bayar(id); break; case 'ulas': ulas(+a.dataset.p); break;
+    case 'bayar': bayar(id); break;
+    case 'va': { const d = await Api.midtransBuat(id); location.href = d.redirectUrl; break; }
+    case 'lacak': lacakAwal = String(id); if (location.hash === '#lacak') R.lacak(); else location.hash = '#lacak'; break; case 'ulas': ulas(+a.dataset.p); break;
     case 'batal': if (await Modal.konfirmasi('Batalkan pesanan ini?', 'Batalkan')) { await Api.batal(id); Toast.ok('Pesanan dibatalkan.'); R.pesanan(); } break;
     case 'terima': if (await Modal.konfirmasi('Konfirmasi barang sudah kamu terima?', 'Sudah Diterima')) { await Api.terima(id); Toast.ok('Terima kasih! Pesanan selesai.'); R.pesanan(); } break;
     case 'favCart': await Api.kerAdd(id, 1); Toast.ok('Ditambahkan ke keranjang.'); badgeNav(); break;
@@ -155,7 +166,7 @@ $('#pf-ganti-email').onclick = () => {
 };
 (async () => {
   user = await Sesi.wajib('customer'); if (!user) return;
-  $('#app').hidden = false; $('#logo').innerHTML = I('leaf', 'w-6 h-6'); $('#ikon-menu').innerHTML = I('menu');
+  $('#app').hidden = false; $('#ikon-menu').innerHTML = I('menu');
   $$('.nav-item').forEach(a => { const s = a.querySelector('.ic') || a.querySelector('[data-ikon]'); if (s) s.innerHTML = I(a.dataset.ikon || 'out'); });
   Dash.init(R, user); badgeNav().catch(() => {});
   lencanaC = Chat.lencana('pesan', () => Api.chatBelum());
