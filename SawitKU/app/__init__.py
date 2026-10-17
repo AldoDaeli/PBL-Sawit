@@ -28,20 +28,23 @@ def create_app(overrides=None):
     # ---- Berkas unggahan (foto produk, bukti bayar, foto profil) ----
     @app.get('/media/<folder>/<nama>')
     def media(folder, nama):
+        from .uploads import baca_media
         if not re.fullmatch(r'(produk|bukti|foto)', folder) or not re.fullmatch(r'[0-9a-f]{32}\.jpg', nama):
             abort(404)
-        r = send_from_directory(f"{app.config['UPLOAD_DIR']}/{folder}", nama, mimetype='image/jpeg', max_age=86400)
+        data = baca_media(folder, nama)
+        if data is None: abort(404)
+        r = Response(data, mimetype='image/jpeg')
         r.headers['Content-Security-Policy'] = "default-src 'none'"
         # Nama berkas = 128-bit acak dan tiap unggahan baru berganti nama -> isinya tidak pernah berubah: aman di-cache 1 tahun
         r.headers['Cache-Control'] = 'private, max-age=3600' if folder == 'bukti' else 'public, max-age=31536000, immutable'   # bukti bayar jangan di cache bersama
-        return r
+        r.set_etag(nama[:-4]); return r.make_conditional(request)
 
     # ---- Frontend (satu origin dengan API: tanpa CORS, CSP 'self' tetap berlaku) ----
     # Halaman dilayani lewat URL pendek; berkas aset (js/css) tetap di /shared/... dan /<halaman>/...
-    HALAMAN = {'landing': '/', 'login': '/masuk', 'register': '/daftar', 'customer': '/dashboard', 'admin': '/admin'}
+    HALAMAN = {'landing': '/', 'login': '/masuk', 'register': '/daftar', 'lupa': '/lupa-password', 'customer': '/dashboard', 'admin': '/admin'}
     ASET = re.compile(r'\.(js|css|svg|png|jpe?g|webp|ico)$', re.I)
 
-    REF = re.compile(r'(src|href)="(/(?:shared|landing|login|register|customer|admin|produk)/[A-Za-z0-9_.\-]+\.(?:js|css))"')
+    REF = re.compile(r'(src|href)="(/(?:shared|landing|login|lupa|register|customer|admin|produk)/[A-Za-z0-9_.\-]+\.(?:js|css))"')
     TW_CDN = re.compile(r'<script src="https://cdn\.tailwindcss\.com"></script>\s*<script src="/shared/tailwind\.js"></script>')
     _html = {}      # folder -> (mtime, teks)
 
@@ -65,11 +68,17 @@ def create_app(overrides=None):
         r = Response(html, mimetype='text/html'); r.headers['Cache-Control'] = 'no-cache'
         return r
 
+    @app.get('/favicon.ico')
+    def favicon(): return redirect('/shared/favicon.ico', 301)
+
     @app.get('/')
     def beranda(): return _halaman('landing')
 
     @app.get('/masuk', strict_slashes=False)
     def halaman_masuk(): return _halaman('login')
+
+    @app.get('/lupa-password', strict_slashes=False)
+    def halaman_lupa(): return _halaman('lupa')
 
     @app.get('/daftar', strict_slashes=False)
     def halaman_daftar(): return _halaman('register')
