@@ -5,3 +5,5 @@ uploads/*
 !uploads/.gitkeep
 
 node_modules/
+.jwt_secret
+*.db
