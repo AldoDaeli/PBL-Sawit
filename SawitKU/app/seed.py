@@ -22,11 +22,22 @@ PESANAN = [
     (2, [(9, 2)], 5, 'selesai', ''), (3, [(1, 1), (11, 2)], 3, 'dikirim', ''), (2, [(3, 1)], 2, 'diproses', ''),
     (2, [(2, 1), (7, 2)], 1, 'menunggu_verifikasi', ''), (3, [(6, 2)], 0.2, 'menunggu_bayar', ''),
 ]
-ULASAN = [  # (produk, user, rating, teks, balasan, umur_hari, umur_balasan)
+ULASAN = [  # (produk, user, rating, teks, balasan, umur_hari, umur_balasan). Hanya produk yang memang dibeli pemiliknya (pesanan selesai)
     (1, 2, 5, 'Tanaman sampai segar dan packing rapi sekali.', 'Terima kasih Kak Budi! Selamat merawat monsteranya.', 70, 69),
     (2, 2, 5, 'Sansevieria kokoh, daunnya tebal. Recommended.', None, 44, 0),
     (4, 3, 4, 'Bunganya cantik, pengiriman agak lama tetapi aman.', 'Terima kasih masukannya, kami akan percepat pengiriman.', 36, 35),
     (3, 3, 5, 'Lucu banget untuk meja kerja!', None, 2, 0),
+    (10, 2, 4, 'Pot-nya kokoh dan warnanya sesuai foto.', None, 72, 0),
+    (10, 3, 3, 'Bagus, tetapi ada goresan kecil di sisi bawah.', 'Maaf atas ketidaknyamanannya, silakan hubungi kami untuk penggantian.', 12, 11),
+    (7, 2, 2, 'Dua daun menguning saat tiba. Semoga cepat pulih.', 'Terima kasih laporannya, kami tambah packing agar lebih aman.', 30, 29),
+    (7, 3, 4, 'Tumbuh bagus setelah seminggu.', None, 17, 0),
+    (6, 2, 5, 'Segar dan lengkap, sesuai deskripsi.', None, 24, 0),
+    (4, 2, 1, 'Pesanan datang terlambat dan tanaman layu.', 'Mohon maaf, kami akan memperbaiki pengemasan. Silakan chat admin untuk penggantian.', 8, 7),
+    (12, 2, 4, 'Media tanam gembur, tanaman suka.', None, 24, 0),
+    (12, 3, 5, 'Kualitas bagus, harga bersahabat.', None, 20, 0),
+    (5, 2, 3, 'Cukup bagus, bunganya belum mekar saat tiba.', None, 10, 0),
+    (9, 2, 5, 'Gantungannya kuat dan cantik.', None, 3, 0),
+    (11, 3, 4, 'Cocok untuk pemula, mudah dirawat.', None, 13, 0),
 ]
 
 
@@ -37,9 +48,11 @@ def kosong(db):
     return db.one('SELECT COUNT(*) AS n FROM pengguna')['n'] == 0
 
 
-def jalankan(db, riwayat=True, acak=False):
+def jalankan(db, riwayat=True, acak=False, pesanan=False):
     """acak=True (dipakai perintah `seed`): password tiap akun demo diacak dan dikembalikan sebagai [(username, password)],
-    jadi tidak ada kredensial tetap yang bisa ditebak dari README. Default (acak=False) dipakai tes."""
+    jadi tidak ada kredensial tetap yang bisa ditebak dari README. Default (acak=False) dipakai tes.
+    pesanan=False (default): TIDAK membuat pesanan contoh, jadi grafik dashboard hanya berisi transaksi asli (lunas di Midtrans).
+    pesanan=True hanya untuk tes / demo lokal."""
     now = int(time.time() * 1000); kredensial = []
     for nama, email, pw, peran, umur in AKUN:
         if acak: pw = 'Sk' + secrets.token_hex(6) + '9'; kredensial.append((nama, pw))
@@ -53,12 +66,12 @@ def jalankan(db, riwayat=True, acak=False):
     for p in produk:
         db.run('INSERT INTO produk (id,nama,kategori,harga,stok,terjual,rating,best_seller,gambar,deskripsi,spesifikasi,dibuat) '
                'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
-               (p['id'], p['nama'], p['kategori'], p['harga'], p['stok'], p['terjual'], p['rating'], int(p['bestSeller']),
+               (p['id'], p['nama'], p['kategori'], p['harga'], p['stok'], p['terjual'], 0, int(p['bestSeller']),
                 p['gambar'], p['deskripsi'], json.dumps(p['spesifikasi'], ensure_ascii=False), now - UMUR_PRODUK.get(p['id'], 10 + p['id']) * HARI))
         info[p['id']] = p
 
-    daftar = [(u, i, d, s, a) for u, i, d, s, a in PESANAN]
-    if riwayat:   # riwayat tambahan agar grafik tren punya sebaran wajar (deterministik)
+    daftar = [(u, i, d, s, a) for u, i, d, s, a in PESANAN] if pesanan else []
+    if pesanan and riwayat:   # riwayat tambahan agar grafik tren punya sebaran wajar (deterministik)
         r = random.Random(20260930)
         for d in range(118, 3, -1):
             if r.random() >= 0.18 + (1 - d / 118) * 0.32: continue
@@ -84,5 +97,7 @@ def jalankan(db, riwayat=True, acak=False):
     for pid, uid, rating, teks, balasan, umur, umur_b in ULASAN:
         db.run('INSERT INTO ulasan (produk_id,user_id,rating,teks,balasan_teks,balasan_dibuat,dibuat) VALUES (%s,%s,%s,%s,%s,%s,%s)',
                (pid, uid, rating, teks, balasan, int(now - umur_b * HARI) if balasan else None, int(now - umur * HARI)))
+    from .services import hitung_rating
+    for pid in info: hitung_rating(db, pid)          # rating produk = rata-rata ulasan; tanpa ulasan = 0
     db.commit()
     return kredensial

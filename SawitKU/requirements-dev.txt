@@ -1,0 +1,2 @@
+-r requirements.txt
+# Tes memakai test client bawaan Flask dan SQLite: tidak ada tambahan yang dibutuhkan.

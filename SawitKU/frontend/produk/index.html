@@ -3,14 +3,72 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="no-referrer"><link rel="icon" type="image/png" sizes="32x32" href="/shared/favicon-32.png"><link rel="icon" href="/shared/favicon.ico" sizes="any"><link rel="apple-touch-icon" href="/shared/apple-touch-icon.png">
 <title>Detail Produk | SawitKu</title>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com"></script><script src="/shared/tailwind.js"></script><link rel="stylesheet" href="/produk/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script><script src="/shared/tailwind.js"></script><link rel="stylesheet" href="/shared/base.css"><link rel="stylesheet" href="/produk/style.css">
 </head>
-<body class="font-sans bg-white text-slate-800 antialiased">
+<body class="font-sans text-slate-800 antialiased">
 <header class="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-100"><div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-  <a href="/" class="flex items-center gap-2 font-extrabold text-xl text-brand-700"><img src="/shared/logo.png" alt="Logo SawitKu" width="48" height="48" class="w-9 h-9 rounded-xl object-cover shrink-0">Sawit<span class="text-sun-500">Ku</span></a>
-  <div class="flex items-center gap-2"><a href="/dashboard#keranjang" class="relative w-11 h-11 grid place-items-center rounded-xl bg-sun-400 text-brand-900 hover:bg-sun-500 transition" aria-label="Keranjang"><span id="ikon-cart"></span><span id="badge" class="hidden absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-brand-700 text-white text-[11px] font-bold place-items-center">0</span></a></div>
+  <a href="/" class="flex items-center gap-2 font-extrabold font-display text-xl text-brand-700"><img src="/shared/logo.png" alt="Logo SawitKu" width="48" height="48" class="w-9 h-9 rounded-xl object-cover shrink-0">Sawit<span class="text-sun-500">Ku</span></a>
+  <a href="/dashboard#keranjang" class="relative w-11 h-11 grid place-items-center rounded-xl bg-sun-400 text-brand-900 hover:bg-sun-500 transition" aria-label="Keranjang"><span data-ikon="cart"></span><span id="badge" class="hidden absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-brand-700 text-white text-[11px] font-bold place-items-center">0</span></a>
 </div></header>
 <main class="max-w-6xl mx-auto px-4 py-8" id="isi"><div class="h-96 rounded-3xl bg-brand-50 animate-pulse"></div></main>
+
+<!-- ===== Template (HTML) ===== -->
+<template id="t-produk">
+  <div>
+    <nav class="text-sm text-slate-500 mb-6" aria-label="Jejak halaman"><a class="hover:text-brand-600" href="/">Beranda</a> / <a class="hover:text-brand-600" href="/#katalog" data-t="kategori"></a> / <span class="text-slate-800" data-t="nama"></span></nav>
+    <div class="grid md:grid-cols-2 gap-8 lg:gap-14">
+      <div class="gambar-utama daun overflow-hidden bg-brand-50 aspect-square"><img data-src="gambar" data-a-alt="{nama}" class="w-full h-full object-cover"></div>
+      <div>
+        <p data-t="kategori" class="text-sm font-semibold text-brand-600"></p>
+        <h1 data-t="nama" class="text-3xl md:text-5xl font-extrabold mt-1 leading-[1.05]"></h1>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-sm">
+          <span data-if="jumlahUlasan" class="inline-flex items-center gap-2"><span data-stars="rating"></span><b data-t="rating|rating"></b><a href="#ulasan" class="text-brand-700 underline underline-offset-2"><span data-t="jumlahUlasan"></span> ulasan</a></span>
+          <span data-ifnot="jumlahUlasan" class="text-slate-500">Belum ada ulasan</span>
+          <span class="text-slate-300" aria-hidden="true">|</span><span><span data-t="terjual|n"></span> terjual</span>
+          <span class="text-slate-300" aria-hidden="true">|</span><span data-cls="stokTipis=text-rose-600 font-semibold">Stok <span data-t="stok"></span></span>
+        </div>
+        <p data-t="harga|rp" class="text-4xl font-extrabold font-display text-brand-700 mt-5"></p>
+        <p data-t="deskripsi" class="text-slate-600 mt-4 leading-relaxed"></p>
+        <div class="flex items-center gap-3 mt-7">
+          <div class="flex items-center rounded-xl border border-slate-300 bg-white h-12"><button data-q="-1" class="w-10 h-full hover:bg-brand-50 rounded-l-xl text-lg" aria-label="Kurangi">&minus;</button><input id="qty" type="number" min="1" data-a-max="{stok}" value="1" class="w-12 text-center font-bold outline-none [appearance:textfield]" aria-label="Jumlah"><button data-q="1" class="w-10 h-full hover:bg-brand-50 rounded-r-xl text-lg" aria-label="Tambah">+</button></div>
+          <button id="btn-cart" data-cls="habis=opacity-50 pointer-events-none" class="btn btn-p btn-besar flex-1"><span data-ikon="cart"></span><span data-t="labelCart"></span></button>
+          <button id="btn-fav" data-cls="fav=fav-aktif" class="w-12 h-12 rounded-xl border border-slate-300 bg-white grid place-items-center text-slate-500 hover:text-rose-500 transition" aria-label="Favorit"><span data-ikon="heart"></span></button>
+        </div>
+        <div data-if="adaSpek" class="mt-8 rounded-2xl border border-slate-200 bg-white overflow-hidden"><h2 class="px-5 py-3 bg-brand-50 font-bold">Spesifikasi</h2>
+          <dl><template data-each="spek"><div class="flex px-5 py-2.5 text-sm border-t border-slate-100"><dt class="w-40 text-slate-500" data-t="k"></dt><dd class="font-medium" data-t="v"></dd></div></template></dl></div>
+      </div>
+    </div>
+    <section id="ulasan" class="mt-16" data-reveal>
+      <h2 class="text-2xl md:text-3xl font-extrabold">Ulasan pembeli <span class="text-slate-400 text-lg font-semibold">(<span data-t="jumlahUlasan"></span>)</span></h2>
+      <div id="daftar-ulasan" class="mt-5 grid md:grid-cols-2 gap-4"></div>
+    </section>
+    <section data-if="adaMirip" class="mt-16" data-reveal><h2 class="text-2xl md:text-3xl font-extrabold">Produk serupa</h2><div id="daftar-mirip" class="mt-5 grid grid-cols-2 md:grid-cols-4 gap-4"></div></section>
+  </div>
+</template>
+
+<template id="t-ulasan">
+  <article class="rounded-2xl border border-slate-200 bg-white p-5">
+    <div class="flex items-center gap-3"><span data-t="inisial" class="w-10 h-10 rounded-full bg-brand-600 text-white grid place-items-center font-bold uppercase"></span>
+      <div><b class="text-sm" data-t="nama"></b><div class="text-xs flex items-center gap-2"><span data-stars="rating"></span><span class="text-slate-400" data-t="dibuat|tgl"></span></div></div></div>
+    <p class="mt-3 text-sm text-slate-600" data-t="teks"></p>
+    <div data-balasan></div>
+    <div data-if="bisaBalas" class="mt-3 text-right"><button class="btn btn-o !h-8 !text-xs" data-a-data-balas="{id}">Balas</button></div>
+  </article>
+</template>
+<template id="t-ulasan-kosong"><p class="text-slate-500 md:col-span-2">Belum ada ulasan untuk produk ini. Ulasan bisa ditulis setelah pesananmu selesai.</p></template>
+<template id="t-balasan">
+  <div data-cls="admin=bg-brand-50 border-brand-500;pelanggan=ml-6 bg-slate-50 border-sun-400" class="mt-3 rounded-xl border-l-4 px-3 py-2 text-sm"><b class="text-xs" data-cls="admin=text-brand-700;pelanggan=text-slate-600"><span data-t="nama"></span> &middot; <span data-t="dibuat|tgl"></span></b><p class="text-slate-600 mt-0.5" data-t="teks"></p></div>
+</template>
+<template id="t-mirip">
+  <a data-href="/produk/{id}" class="kartu group rounded-2xl border border-slate-200 bg-white overflow-hidden"><div class="aspect-square overflow-hidden"><img data-src="gambar" data-a-alt="{nama}" loading="lazy" class="w-full h-full object-cover"></div><div class="p-3"><p class="font-semibold text-sm line-clamp-1" data-t="nama"></p><b class="text-brand-700 text-sm" data-t="harga|rp"></b></div></a>
+</template>
+<template id="t-tidak-ada"><div class="text-center py-24"><h1 class="text-2xl font-extrabold">Produk tidak ditemukan</h1><a href="/#katalog" class="inline-block mt-4 text-brand-600 font-semibold">&larr; Kembali ke katalog</a></div></template>
+<template id="t-gagal"><div class="text-center py-24"><h1 class="text-2xl font-extrabold">Gagal memuat produk</h1><p class="text-slate-500 mt-2" data-t="pesan"></p></div></template>
+<template id="t-balas-modal">
+  <div class="p-6"><h2 class="font-extrabold text-lg">Balas admin</h2><textarea id="bl" rows="4" maxlength="300" class="in mt-3" placeholder="Tulis balasanmu..."></textarea><p id="bl-err" class="text-sm text-rose-600 min-h-5" role="alert"></p>
+    <div class="flex justify-end gap-2 mt-2"><button data-tutup class="btn btn-o">Batal</button><button id="bl-ok" class="btn btn-p">Kirim</button></div></div>
+</template>
+
 <script src="/shared/core.js"></script><script src="/produk/script.js"></script>
 </body></html>

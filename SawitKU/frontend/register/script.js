@@ -8,8 +8,6 @@ const cek = {
 const warna = ['#f43f5e', '#f59e0b', '#84cc16', '#38995e'];
 function tampil(k) { const e = cek[k]($('#' + k).value.trim ? $('#' + k).value : ''); $('#e-' + k).textContent = e; $('#' + k).closest('.campur').classList.toggle('salah', !!e); return !e; }
 async function init() {
-  $('#i-user').innerHTML = I('user'); $('#i-mail').innerHTML = I('mail'); $('#i-lock').innerHTML = I('lock'); $('#i-lock2').innerHTML = I('lock'); $('#lihat').innerHTML = I('eye');
-  const u = await Sesi.segarkan(); if (u) location.replace(Sesi.beranda(u.peran));
 }
 $('#lihat').onclick = () => { const f = $('#password'); f.type = f.type === 'password' ? 'text' : 'password'; };
 ['username', 'email', 'password', 'konfirmasi'].forEach(k => $('#' + k).addEventListener('blur', () => tampil(k)));
@@ -37,7 +35,6 @@ $('#form').onsubmit = async e => {
 };
 
 /* ---- Langkah 2: verifikasi kode ---- */
-$('#i-otp').innerHTML = I('shield');
 $('#kode').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); });
 $('#form-otp').onsubmit = async e => {
   e.preventDefault(); const err = $('#err-otp'), btn = $('#btn-otp'), kode = $('#kode').value; err.textContent = '';

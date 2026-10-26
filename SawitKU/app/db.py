@@ -1,6 +1,11 @@
-"""Lapisan basis data tipis di atas PyMySQL (MariaDB). Satu koneksi per request; commit otomatis bila sukses."""
+"""Lapisan basis data tipis di atas PyMySQL (MariaDB) + konteks per-request.
+Satu koneksi per request (dibuat saat pertama dipakai); commit saat request sukses, rollback bila ada galat.
+Konteks request disimpan di `flask.g`, jadi otomatis terpisah antar request dan antar thread."""
 import sqlite3
-from flask import g, current_app
+
+from flask import g, has_app_context
+
+from .config import cfg
 
 try:
     import pymysql
@@ -36,28 +41,52 @@ class Db:
 
 
 def connect():
-    cfg = current_app.config
     return Db(pymysql.connect(
         host=cfg['DB_HOST'], port=cfg['DB_PORT'], user=cfg['DB_USER'], password=cfg['DB_PASSWORD'],
         database=cfg['DB_NAME'], charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor, autocommit=False,
     ))
 
 
+# ---------------- Konteks request ----------------
+class Konteks:
+    """Keadaan satu request: koneksi DB (lazy), token JWT baru bila sesi diperpanjang, dan IP klien."""
+    __slots__ = ('db', 'token_baru', 'ip')
+
+    def __init__(self): self.db, self.token_baru, self.ip = None, None, '?'
+
+
+def mulai_konteks():
+    """Dipanggil di awal request (before_request): siapkan konteks baru di `g`."""
+    k = Konteks(); g._sk = k; return k
+
+
+def konteks():
+    if not has_app_context(): return Konteks()        # di luar request (CLI, skrip): konteks sekali pakai
+    k = g.get('_sk')
+    if k is None: k = g._sk = Konteks()
+    return k
+
+
 def get_db():
-    if 'db' not in g:
-        g.db = connect()
-    return g.db
+    k = konteks()
+    if k.db is None: k.db = connect()
+    return k.db
 
 
-def _teardown(exc):
-    db = g.pop('db', None)
-    if db is None:
-        return
-    try:
-        db.commit() if exc is None else db.rollback()
+def simpan():
+    """Commit transaksi request ini (bila koneksi pernah dibuka)."""
+    k = g.get('_sk') if has_app_context() else None
+    if k is not None and k.db is not None: k.db.commit()
+
+
+def batal():
+    k = g.get('_sk') if has_app_context() else None
+    if k is not None and k.db is not None: k.db.rollback()
+
+
+def tutup(k):
+    """Akhir request: transaksi yang menggantung dibatalkan, koneksi ditutup."""
+    if k.db is None: return
+    try: k.db.rollback()
     finally:
-        db.close()
-
-
-def init_app(app):
-    app.teardown_appcontext(_teardown)
+        k.db.close(); k.db = None

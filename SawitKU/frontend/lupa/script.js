@@ -1,6 +1,5 @@
 'use strict';
 let email = '', jeda = 0, timer = null;
-$('#i-mail').innerHTML = I('mail'); $('#i-kode').innerHTML = I('shield'); $('#i-lock').innerHTML = I('lock'); $('#i-lock2').innerHTML = I('lock');
 function hitungMundur(d) {
   clearInterval(timer); jeda = d; const b = $('#ulang');
   const t = () => { b.disabled = jeda > 0; b.textContent = jeda > 0 ? `Kirim ulang kode (${jeda} dtk)` : 'Kirim ulang kode'; };

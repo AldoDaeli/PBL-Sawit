@@ -1,0 +1,42 @@
+/* Halaman masuk / daftar / verifikasi / lupa password: kartu putih di tengah, latar hijau lembut berkabut + daun melayang */
+.auth-latar{position:relative;min-height:100vh;min-height:100dvh;overflow:hidden;
+  background:
+    radial-gradient(38rem 30rem at 12% 14%,rgba(120,200,150,.55),transparent 70%),
+    radial-gradient(34rem 28rem at 92% 10%,rgba(110,190,140,.5),transparent 70%),
+    radial-gradient(26rem 22rem at 96% 46%,rgba(240,220,120,.35),transparent 70%),
+    radial-gradient(30rem 24rem at 6% 52%,rgba(240,225,130,.28),transparent 70%),
+    radial-gradient(40rem 22rem at 50% 108%,rgba(120,160,140,.55),transparent 70%),
+    radial-gradient(34rem 26rem at 100% 100%,rgba(100,185,140,.55),transparent 70%),
+    linear-gradient(135deg,#f1faf4 0%,#e1f3e7 55%,#cfe9d9 100%)}
+.auth-tengah{position:relative;z-index:1;min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:4.5rem 1.25rem 2rem}
+.auth-beranda{position:absolute;z-index:2;top:1.5rem;right:1.5rem;font-size:.8rem;font-weight:600;color:var(--hutan);background:#fff;padding:.5rem 1rem;border-radius:9999px;box-shadow:0 2px 10px rgba(23,63,42,.08);transition:box-shadow .2s,transform .15s}
+.auth-beranda:hover{box-shadow:0 4px 16px rgba(23,63,42,.16)}
+.auth-kartu{width:100%;max-width:21rem;background:linear-gradient(180deg,#fff,#fbfefc);border-radius:1.75rem;padding:2rem 1.7rem 1.75rem;
+  box-shadow:0 30px 60px -28px rgba(23,63,42,.35),0 0 0 1px rgba(23,63,42,.04);animation:auth-masuk .5s cubic-bezier(.2,.8,.2,1) both}
+@keyframes auth-masuk{from{opacity:0;transform:translateY(16px) scale(.98)}}
+.auth-merk{display:flex;flex-direction:column;align-items:center;gap:.4rem;margin-bottom:1.25rem;font-family:"Bricolage Grotesque","Plus Jakarta Sans",sans-serif;font-weight:800;font-size:1.05rem;color:#1e293b}
+.auth-merk img{width:4rem;height:4rem;border-radius:9999px;object-fit:cover;box-shadow:0 8px 20px -8px rgba(23,63,42,.5)}
+.auth-merk b{color:var(--sawit)}
+/* daun dekoratif */
+.auth-daun{position:absolute;z-index:0;pointer-events:none;background:#7fb897;opacity:.55;border-radius:100% 0 100% 0}
+.auth-daun::after{content:"";position:absolute;left:12%;bottom:12%;width:38%;height:2px;background:rgba(255,255,255,.35);transform:rotate(-45deg);transform-origin:left}
+.auth-daun.d1{width:3.2rem;height:3.2rem;left:3.5%;top:5%;transform:rotate(-12deg)}
+.auth-daun.d2{width:3.4rem;height:3.4rem;right:3.5%;top:7%;transform:rotate(18deg);opacity:.4}
+.auth-daun.d3{width:2.4rem;height:2.4rem;left:3%;bottom:6%;transform:rotate(-20deg)}
+.auth-daun.d4{width:4rem;height:4rem;right:4%;bottom:5%;transform:rotate(14deg)}
+@media (prefers-reduced-motion:reduce){.auth-kartu{animation:none}}
+/* kolom isian bentuk pil */
+.campur{display:flex;align-items:center;height:2.9rem;border-radius:9999px;background:#fff;border:1px solid #d6e8dc;box-shadow:0 1px 2px rgba(23,63,42,.04);transition:box-shadow .2s,border-color .2s}
+.campur:focus-within{border-color:#38995e;box-shadow:0 0 0 3px rgba(56,153,94,.2)}
+.campur.salah{border-color:#f43f5e}
+.campur input{flex:1;min-width:0;height:100%;background:transparent;outline:none;font-size:.82rem;padding-right:.9rem}
+.campur input::placeholder{color:#a3aebb}
+.ikon{width:2.5rem;display:grid;place-items:center;color:#38995e;margin-left:.3rem}
+.ikon .ic,.campur .ic{width:1rem;height:1rem}
+.auth-kartu .btn-besar{border-radius:9999px;background:#349a5c;box-shadow:0 10px 20px -8px rgba(41,123,74,.65)}
+.auth-kartu .btn-besar:hover{background:#2b8450}
+.bantu{font-size:.72rem;color:#e11d48;margin:.25rem 0 0 .9rem;min-height:.5rem}
+.kuat{flex:1;height:4px;border-radius:9px;background:#e2e8f0;transition:background .3s}
+.auth-kode{letter-spacing:.5em;text-align:center;font-weight:700;font-size:1rem;padding-left:.5em}
+.auth-kode::placeholder{letter-spacing:.35em;font-weight:400}
+@media (max-width:480px){.auth-kartu{padding:1.75rem 1.25rem 1.5rem}.auth-daun.d4{width:3rem;height:3rem}}

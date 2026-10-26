@@ -7,92 +7,105 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="no-referrer">
 <link rel="icon" type="image/png" sizes="32x32" href="/shared/favicon-32.png"><link rel="icon" href="/shared/favicon.ico" sizes="any"><link rel="apple-touch-icon" href="/shared/apple-touch-icon.png">
-<title>SawitKu | Toko Online</title>
+<title>SawitKu | Toko Tanaman Online</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="/shared/tailwind.js"></script>
+<link rel="stylesheet" href="/shared/base.css">
 <link rel="stylesheet" href="/landing/style.css">
 </head>
-<body class="font-sans bg-white text-slate-800 antialiased">
+<body class="font-sans text-slate-800 antialiased">
 
 <div class="bg-brand-900 text-brand-100 text-xs">
   <div class="max-w-7xl mx-auto px-4 py-2 flex justify-center md:justify-between gap-6 flex-wrap">
-    <span class="flex items-center gap-2" id="strip-1"></span><span class="hidden md:flex items-center gap-2" id="strip-2"></span><span class="hidden md:flex items-center gap-2" id="strip-3"></span>
+    <span class="flex items-center gap-2"><span data-ikon="shield" data-kelas="w-4 h-4"></span>Tanaman sehat bergaransi</span>
+    <span class="hidden md:flex items-center gap-2"><span data-ikon="truck" data-kelas="w-4 h-4"></span>Packing aman ke seluruh Indonesia</span>
+    <span class="hidden md:flex items-center gap-2"><span data-ikon="leaf" data-kelas="w-4 h-4"></span>Garansi hidup 7 hari</span>
   </div>
 </div>
 
 <header class="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-100">
-  <div class="max-w-7xl mx-auto px-4 h-20 flex items-center gap-4">
-    <a href="#beranda" class="flex items-center gap-2 text-2xl font-extrabold text-brand-700"><img src="/shared/logo.png" alt="Logo SawitKu" width="48" height="48" class="w-10 h-10 rounded-xl object-cover shrink-0">Sawit<span class="text-sun-500">Ku</span></a>
+  <div class="max-w-7xl mx-auto px-4 h-[4.5rem] flex items-center gap-4">
+    <a href="#beranda" class="flex items-center gap-2 text-2xl font-extrabold font-display text-brand-700"><img src="/shared/logo.png" alt="Logo SawitKu" width="48" height="48" class="w-10 h-10 rounded-xl object-cover shrink-0">Sawit<span class="text-sun-500">Ku</span></a>
     <form id="form-cari" class="flex-1 hidden md:flex max-w-xl mx-auto" role="search">
       <input id="cari" type="search" maxlength="60" placeholder="Cari monstera, kaktus, pot..." aria-label="Cari produk" class="w-full h-11 pl-4 pr-2 rounded-l-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-400 text-sm">
-      <button class="h-11 px-4 bg-brand-600 hover:bg-brand-700 text-white rounded-r-xl transition" aria-label="Cari" id="btn-cari"></button>
+      <button class="h-11 px-4 bg-brand-600 hover:bg-brand-700 text-white rounded-r-xl transition" aria-label="Cari" data-ikon="search"></button>
     </form>
     <div class="ml-auto flex items-center gap-2">
-      <a id="btn-fav" href="/dashboard#favorit" class="relative w-11 h-11 grid place-items-center rounded-xl hover:bg-brand-50 text-slate-600" aria-label="Favorit"></a>
-      <a id="btn-cart" href="/dashboard#keranjang" class="relative w-11 h-11 grid place-items-center rounded-xl bg-sun-400 hover:bg-sun-500 text-brand-900 transition" aria-label="Keranjang"><span id="ikon-cart"></span><span id="badge-cart" class="hidden absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-brand-700 text-white text-[11px] font-bold grid place-items-center">0</span></a>
+      <a id="btn-fav" href="/dashboard#favorit" class="w-11 h-11 grid place-items-center rounded-xl hover:bg-brand-50 text-slate-600" aria-label="Favorit" data-ikon="heart" data-kelas="w-[22px] h-[22px]"></a>
+      <a id="btn-cart" href="/dashboard#keranjang" class="relative w-11 h-11 grid place-items-center rounded-xl bg-sun-400 hover:bg-sun-500 text-brand-900 transition" aria-label="Keranjang"><span data-ikon="cart" data-kelas="w-[22px] h-[22px]"></span><span id="badge-cart" class="hidden absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-brand-700 text-white text-[11px] font-bold place-items-center">0</span></a>
       <div id="area-auth"></div>
-      <button id="btn-menu" class="md:hidden w-11 h-11 grid place-items-center rounded-xl hover:bg-brand-50" aria-label="Menu"></button>
+      <button id="btn-menu" class="md:hidden w-11 h-11 grid place-items-center rounded-xl hover:bg-brand-50" aria-label="Menu" data-ikon="menu"></button>
     </div>
   </div>
-  <nav class="bg-brand-600 text-white">
-    <div class="max-w-7xl mx-auto px-4 flex items-center h-14 gap-2">
+  <nav class="bg-brand-700 text-white">
+    <div class="max-w-7xl mx-auto px-4 flex items-center h-12 gap-2">
       <div class="relative">
-        <button id="btn-kat" class="h-14 px-4 bg-brand-800 hover:bg-brand-900 flex items-center gap-2 font-semibold text-sm transition" aria-expanded="false"><span id="ikon-kat"></span>Kategori</button>
+        <button id="btn-kat" class="h-12 px-4 bg-brand-900 hover:bg-black/30 flex items-center gap-2 font-semibold text-sm transition" aria-expanded="false" aria-controls="menu-kat"><span data-ikon="menu" data-kelas="w-4 h-4"></span>Kategori</button>
         <ul id="menu-kat" class="hidden absolute left-0 top-full w-60 bg-white text-slate-700 rounded-b-xl shadow-xl py-2 animate-pop"></ul>
       </div>
-      <div id="nav-link" class="hidden md:flex items-center text-sm font-semibold">
-        <a href="#beranda" class="px-4 py-4 hover:bg-brand-700 transition">Beranda</a><a href="#terlaris" class="px-4 py-4 hover:bg-brand-700 transition">Terlaris</a><a href="#katalog" class="px-4 py-4 hover:bg-brand-700 transition">Katalog</a><a href="#kontak" class="px-4 py-4 hover:bg-brand-700 transition">Kontak</a>
+      <div class="hidden md:flex items-center text-sm font-semibold">
+        <a href="#beranda" class="px-4 py-3.5 hover:bg-brand-800 transition">Beranda</a><a href="#terlaris" class="px-4 py-3.5 hover:bg-brand-800 transition">Terlaris</a><a href="#katalog" class="px-4 py-3.5 hover:bg-brand-800 transition">Katalog</a><a href="#kontak" class="px-4 py-3.5 hover:bg-brand-800 transition">Kontak</a>
       </div>
-      <a id="kontak-wa" href="https://wa.me/6281234567890" target="_blank" rel="noopener noreferrer" class="ml-auto flex items-center gap-2 text-sm font-semibold pl-4 border-l border-brand-500 h-14" aria-label="Chat WhatsApp SawitKu"><span id="ikon-tel"></span><span class="leading-tight"><span class="block text-[11px] text-brand-100 font-normal">Chat WhatsApp</span><span id="kontak-wa-teks">+62 812-3456-7890</span></span></a>
+      <a id="kontak-wa" href="https://wa.me/6281234567890" target="_blank" rel="noopener noreferrer" class="ml-auto flex items-center gap-2 text-sm font-semibold pl-4 border-l border-brand-500 h-12" aria-label="Chat WhatsApp SawitKu"><span data-ikon="phone" data-kelas="w-5 h-5"></span><span class="leading-tight"><span class="block text-[11px] text-brand-100 font-normal">Chat WhatsApp</span><span id="kontak-wa-teks">+62 812-3456-7890</span></span></a>
     </div>
-    <div id="nav-mobile" class="hidden md:hidden bg-brand-700 px-4 pb-3 text-sm font-semibold"><a class="block py-2" href="#beranda">Beranda</a><a class="block py-2" href="#terlaris">Terlaris</a><a class="block py-2" href="#katalog">Katalog</a><a class="block py-2" href="#kontak">Kontak</a></div>
+    <div id="nav-mobile" class="hidden md:hidden bg-brand-800 px-4 pb-3 text-sm font-semibold"><a class="block py-2" href="#beranda">Beranda</a><a class="block py-2" href="#terlaris">Terlaris</a><a class="block py-2" href="#katalog">Katalog</a><a class="block py-2" href="#kontak">Kontak</a></div>
   </nav>
 </header>
 
 <main>
 <section id="beranda" class="max-w-7xl mx-auto px-4 pt-8 grid lg:grid-cols-3 gap-5">
-  <div class="lg:col-span-2 relative overflow-hidden rounded-3xl bg-brand-50 min-h-[380px]" id="slider" aria-roledescription="carousel"></div>
+  <div class="lg:col-span-2 relative overflow-hidden daun bg-brand-50 min-h-[400px]" id="slider" aria-roledescription="carousel" aria-label="Produk pilihan"></div>
   <div class="grid sm:grid-cols-2 lg:grid-cols-1 gap-5" id="side-cards"></div>
 </section>
 
 <section class="max-w-7xl mx-auto px-4 mt-8 grid grid-cols-2 md:grid-cols-4 gap-4" id="fitur"></section>
 
 <section id="terlaris" class="max-w-7xl mx-auto px-4 mt-16">
-  <div data-reveal class="flex items-end justify-between mb-6"><div><p class="text-brand-600 font-bold text-sm tracking-wide uppercase">Pilihan Pelanggan</p><h2 class="text-3xl font-extrabold">Produk Terlaris</h2></div></div>
+  <div data-reveal class="mb-6"><h2 class="text-3xl md:text-4xl font-extrabold">Produk terlaris</h2><p class="text-slate-500 mt-1">Paling banyak dibeli pelanggan SawitKu.</p></div>
   <div id="grid-terlaris" class="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6"></div>
 </section>
 
 <section id="katalog" class="max-w-7xl mx-auto px-4 mt-16">
-  <div data-reveal class="mb-6"><p class="text-brand-600 font-bold text-sm tracking-wide uppercase">Katalog</p><h2 class="text-3xl font-extrabold">Semua Produk</h2></div>
-  <div data-reveal class="flex flex-wrap gap-3 items-center bg-brand-50 rounded-2xl p-4 mb-6">
-    <select id="f-kat" class="h-10 rounded-xl border border-slate-200 px-3 text-sm bg-white" aria-label="Kategori"></select>
-    <select id="f-harga" class="h-10 rounded-xl border border-slate-200 px-3 text-sm bg-white" aria-label="Rentang harga"><option value="">Semua harga</option><option value="0-50000">Di bawah Rp50 rb</option><option value="50000-100000">Rp50 rb – 100 rb</option><option value="100000-200000">Rp100 rb – 200 rb</option><option value="200000-99999999">Di atas Rp200 rb</option></select>
-    <select id="f-rating" class="h-10 rounded-xl border border-slate-200 px-3 text-sm bg-white" aria-label="Rating minimal"><option value="0">Semua rating</option><option value="4.5">4.5 ke atas</option><option value="4">4.0 ke atas</option></select>
-    <select id="f-urut" class="h-10 rounded-xl border border-slate-200 px-3 text-sm bg-white" aria-label="Urutkan"><option value="populer">Terpopuler</option><option value="murah">Harga terendah</option><option value="mahal">Harga tertinggi</option><option value="rating">Rating tertinggi</option></select>
-    <button id="f-reset" class="h-10 px-4 rounded-xl text-sm font-semibold text-brand-700 hover:bg-white transition">Atur ulang</button>
-    <span id="jml-hasil" class="ml-auto text-sm text-slate-500"></span>
+  <div data-reveal class="mb-6"><h2 class="text-3xl md:text-4xl font-extrabold">Semua produk</h2></div>
+  <div data-reveal class="bg-white border border-slate-200 rounded-2xl p-4 mb-6 space-y-4">
+    <div class="flex flex-wrap gap-3 items-center">
+      <select id="f-kat" class="in !w-auto" aria-label="Kategori"></select>
+      <select id="f-harga" class="in !w-auto" aria-label="Rentang harga"><option value="">Semua harga</option><option value="0-50000">Di bawah Rp50 rb</option><option value="50000-100000">Rp50 rb – 100 rb</option><option value="100000-200000">Rp100 rb – 200 rb</option><option value="200000-99999999">Di atas Rp200 rb</option></select>
+      <select id="f-urut" class="in !w-auto" aria-label="Urutkan"><option value="populer">Terpopuler</option><option value="murah">Harga terendah</option><option value="mahal">Harga tertinggi</option><option value="rating">Rating tertinggi</option></select>
+      <button id="f-reset" class="btn btn-o">Atur ulang</button>
+      <span id="jml-hasil" class="ml-auto text-sm text-slate-500" aria-live="polite"></span>
+    </div>
+    <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Rating minimal">
+      <span class="text-sm font-semibold text-slate-600 mr-1">Rating</span>
+      <button class="tab aktif" data-rating="0">Semua</button>
+      <button class="tab inline-flex items-center gap-1" data-rating="1">1 <svg class="ic ic-isi w-3.5 h-3.5 text-sun-500"><use href="/shared/icons.svg#star"/></svg> ke atas</button>
+      <button class="tab inline-flex items-center gap-1" data-rating="2">2 <svg class="ic ic-isi w-3.5 h-3.5 text-sun-500"><use href="/shared/icons.svg#star"/></svg> ke atas</button>
+      <button class="tab inline-flex items-center gap-1" data-rating="3">3 <svg class="ic ic-isi w-3.5 h-3.5 text-sun-500"><use href="/shared/icons.svg#star"/></svg> ke atas</button>
+      <button class="tab inline-flex items-center gap-1" data-rating="4">4 <svg class="ic ic-isi w-3.5 h-3.5 text-sun-500"><use href="/shared/icons.svg#star"/></svg> ke atas</button>
+      <button class="tab inline-flex items-center gap-1" data-rating="5">5 <svg class="ic ic-isi w-3.5 h-3.5 text-sun-500"><use href="/shared/icons.svg#star"/></svg></button>
+    </div>
   </div>
   <div id="grid-katalog" class="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6"></div>
 </section>
 
 <section id="kontak" class="max-w-7xl mx-auto px-4 mt-20 mb-20">
-  <div data-reveal class="grid lg:grid-cols-2 rounded-3xl overflow-hidden bg-brand-800 text-white">
-    <div class="p-8 md:p-12 relative">
-      <p class="text-sun-400 font-bold text-sm tracking-wide uppercase">Hubungi Admin</p><h2 class="text-3xl font-extrabold mt-2">Ada keluhan, pertanyaan, atau ingin bermitra?</h2>
-      <p class="text-brand-100 mt-3">Tim kami membalas dalam 1x24 jam pada hari kerja.</p>
+  <div data-reveal class="grid lg:grid-cols-2 rounded-3xl overflow-hidden bg-brand-900 text-white">
+    <div class="p-8 md:p-12">
+      <h2 class="text-3xl md:text-4xl font-extrabold">Ada pertanyaan, keluhan, atau ingin bermitra?</h2>
+      <p class="text-brand-100 mt-3 max-w-md">Tim kami membalas dalam 1x24 jam pada hari kerja.</p>
       <ul class="mt-8 space-y-4 text-brand-100" id="info-kontak"></ul>
     </div>
     <form id="form-kontak" class="bg-white text-slate-800 p-8 md:p-12 space-y-4" novalidate>
-      <div><label class="text-sm font-semibold" for="k-nama">Nama</label><input id="k-nama" maxlength="50" autocomplete="name" class="mt-1 w-full h-11 rounded-xl border border-slate-200 px-3 focus:outline-none focus:ring-2 focus:ring-brand-400"></div>
+      <div><label class="text-sm font-semibold" for="k-nama">Nama</label><input id="k-nama" maxlength="50" autocomplete="name" class="in mt-1"></div>
       <div class="grid sm:grid-cols-2 gap-4">
-        <div><label class="text-sm font-semibold" for="k-email">Email</label><input id="k-email" type="email" maxlength="100" autocomplete="email" class="mt-1 w-full h-11 rounded-xl border border-slate-200 px-3 focus:outline-none focus:ring-2 focus:ring-brand-400"></div>
-        <div><label class="text-sm font-semibold" for="k-jenis">Keperluan</label><select id="k-jenis" class="mt-1 w-full h-11 rounded-xl border border-slate-200 px-3 bg-white"><option>Pertanyaan</option><option>Keluhan</option><option>Kerja sama</option></select></div>
+        <div><label class="text-sm font-semibold" for="k-email">Email</label><input id="k-email" type="email" maxlength="100" autocomplete="email" class="in mt-1"></div>
+        <div><label class="text-sm font-semibold" for="k-jenis">Keperluan</label><select id="k-jenis" class="in mt-1"><option>Pertanyaan</option><option>Keluhan</option><option>Kerja sama</option></select></div>
       </div>
-      <div><label class="text-sm font-semibold" for="k-isi">Pesan</label><textarea id="k-isi" rows="4" maxlength="500" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400"></textarea></div>
+      <div><label class="text-sm font-semibold" for="k-isi">Pesan</label><textarea id="k-isi" rows="4" maxlength="500" class="in mt-1"></textarea></div>
       <p id="k-err" class="text-sm text-rose-600 min-h-5" role="alert"></p>
-      <button class="w-full h-12 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold transition active:scale-[.98]">Kirim Pesan</button>
+      <button class="btn btn-p btn-besar w-full">Kirim pesan</button>
     </form>
   </div>
 </section>
@@ -101,20 +114,84 @@
 <footer class="bg-brand-900 text-brand-200 text-sm" aria-label="Navigasi bawah">
   <div class="max-w-7xl mx-auto px-4 pt-12 pb-8 grid gap-10 md:grid-cols-4">
     <div class="md:col-span-2">
-      <a href="#beranda" class="inline-flex items-center gap-3 text-2xl font-extrabold text-white"><img src="/shared/logo.png" alt="Logo SawitKu" width="48" height="48" class="w-12 h-12 rounded-xl object-cover">Sawit<span class="text-sun-400">Ku</span></a>
-      <p class="mt-4 max-w-sm text-brand-200/90">Belanja produk sawit dan kebutuhan kebunmu dengan mudah: bayar via QRIS atau Virtual Account, lacak paket langsung dari akunmu.</p>
+      <a href="#beranda" class="inline-flex items-center gap-3 text-2xl font-extrabold font-display text-white"><img src="/shared/logo.png" alt="Logo SawitKu" width="48" height="48" class="w-12 h-12 rounded-xl object-cover">Sawit<span class="text-sun-400">Ku</span></a>
+      <p class="mt-4 max-w-sm text-brand-200/90">Belanja tanaman dan perlengkapan berkebun dengan mudah. Bayar lewat QRIS atau Virtual Account, lacak paket dari akunmu.</p>
     </div>
     <nav aria-label="Jelajahi"><h2 class="text-white font-bold mb-3">Jelajahi</h2><ul class="space-y-2">
-      <li><a class="hover:text-white transition" href="#beranda">Beranda</a></li><li><a class="hover:text-white transition" href="#terlaris">Produk Terlaris</a></li>
-      <li><a class="hover:text-white transition" href="#katalog">Katalog</a></li><li><a class="hover:text-white transition" href="#kontak">Hubungi Kami</a></li></ul></nav>
+      <li><a class="hover:text-white transition" href="#beranda">Beranda</a></li><li><a class="hover:text-white transition" href="#terlaris">Produk terlaris</a></li>
+      <li><a class="hover:text-white transition" href="#katalog">Katalog</a></li><li><a class="hover:text-white transition" href="#kontak">Hubungi kami</a></li></ul></nav>
     <nav aria-label="Akun"><h2 class="text-white font-bold mb-3">Akun</h2><ul class="space-y-2">
       <li><a class="hover:text-white transition" href="/masuk">Masuk</a></li><li><a class="hover:text-white transition" href="/daftar">Daftar</a></li>
-      <li><a class="hover:text-white transition" href="/dashboard#pesanan">Pesanan Saya</a></li><li><a class="hover:text-white transition" href="/dashboard#lacak">Lacak Paket</a></li></ul></nav>
+      <li><a class="hover:text-white transition" href="/dashboard#pesanan">Pesanan saya</a></li><li><a class="hover:text-white transition" href="/dashboard#lacak">Lacak paket</a></li></ul></nav>
   </div>
   <div class="border-t border-brand-800"><div class="max-w-7xl mx-auto px-4 py-5 flex flex-wrap items-center justify-between gap-3"><span>&copy; 2026 SawitKu. PBL RKS Tim 304.</span>
     <a href="#beranda" class="inline-flex items-center gap-2 font-semibold text-white hover:text-sun-400 transition">Kembali ke atas <span aria-hidden="true">&uarr;</span></a></div></div>
 </footer>
-<button id="ke-atas" type="button" aria-label="Kembali ke atas" class="hidden fixed bottom-5 right-5 z-40 w-12 h-12 rounded-full bg-brand-600 hover:bg-brand-700 text-white shadow-lg shadow-brand-900/30 grid place-items-center text-xl transition active:scale-95">&uarr;</button>
+<button id="ke-atas" type="button" aria-label="Kembali ke atas" class="hidden fixed bottom-5 right-5 z-40 w-12 h-12 rounded-full bg-brand-600 hover:bg-brand-700 text-white shadow-lg shadow-brand-900/30 place-items-center text-xl transition active:scale-95">&uarr;</button>
+
+<!-- ===== Template (HTML): JS hanya mengisi data. Lihat T di shared/core.js ===== -->
+<template id="t-kartu">
+  <article class="kartu group bg-white rounded-2xl border border-slate-100 overflow-hidden flex flex-col" data-reveal>
+    <div class="relative aspect-square overflow-hidden bg-brand-50 m-2 daun-kecil">
+      <a data-href="/produk/{id}" data-a-aria-label="{nama}"><img data-src="gambar" data-a-alt="{nama}" loading="lazy" class="w-full h-full object-cover"></a>
+      <span data-if="bestSeller" class="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-sun-400 text-brand-900 text-[11px] font-bold">Terlaris</span>
+      <button data-aksi="fav" data-a-data-id="{id}" data-cls="fav=fav-aktif" data-a-aria-pressed="{fav}" class="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/90 grid place-items-center text-slate-500 hover:text-rose-500 transition" aria-label="Favorit"><span data-ikon="heart" data-kelas="w-[18px] h-[18px]"></span></button>
+    </div>
+    <div class="px-4 pb-4 pt-2 flex flex-col flex-1">
+      <p data-t="kategori" class="text-xs font-semibold text-brand-600"></p>
+      <a data-href="/produk/{id}" data-t="nama" class="font-bold leading-snug mt-0.5 hover:text-brand-700 line-clamp-2"></a>
+      <div class="flex items-center gap-2 text-xs mt-1.5 text-slate-500">
+        <span data-if="jumlahUlasan" class="inline-flex items-center gap-1.5"><span data-stars="rating"></span><span data-t="rating|rating" class="font-semibold text-slate-700"></span></span>
+        <span data-ifnot="jumlahUlasan">Belum ada ulasan</span>
+        <span>&middot;</span><span><span data-t="terjual|n"></span> terjual</span>
+      </div>
+      <div class="mt-auto pt-3 flex items-center justify-between gap-2"><b data-t="harga|rp" class="text-brand-700 text-lg font-display"></b>
+        <button data-aksi="cart" data-a-data-id="{id}" data-a-aria-label="{aksiCart}" class="w-10 h-10 rounded-xl grid place-items-center bg-brand-600 text-white hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400 transition active:scale-90"><span data-ikon="plus" data-if="ada"></span><span data-if="habis" aria-hidden="true">–</span></button></div>
+    </div>
+  </article>
+</template>
+
+<template id="t-slide">
+  <div class="slide" data-cls="pertama=aktif">
+    <div class="absolute inset-0 bg-[radial-gradient(circle_at_78%_45%,#bbe3c6,transparent_62%)]"></div>
+    <div class="relative h-full grid md:grid-cols-2 items-center gap-4 p-8 md:p-12">
+      <div class="s-teks"><p data-t="sub" class="inline-block rounded-full bg-sun-400 text-brand-900 text-xs font-bold px-3 py-1"></p>
+        <h1 data-t="nama" class="text-4xl md:text-5xl font-extrabold leading-[1.05] mt-3"></h1>
+        <p data-t="ringkas" class="text-slate-600 mt-3 max-w-sm line-clamp-3"></p>
+        <a data-href="/produk/{id}" class="btn btn-p btn-besar mt-6 !rounded-full !px-6">Lihat produk <span data-ikon="arrow" data-kelas="w-4 h-4"></span></a></div>
+      <div class="hidden md:block"><div class="aspect-square max-w-xs ml-auto daun overflow-hidden ring-8 ring-white shadow-2xl"><img class="s-gambar w-full h-full object-cover" data-src="gambar" data-a-alt="{nama}"></div></div>
+    </div>
+  </div>
+</template>
+<template id="t-dot"><button class="dot" data-cls="pertama=aktif" data-a-data-slide="{_i}" data-a-aria-label="Slide {no}"></button></template>
+
+<template id="t-kartu-samping">
+  <a data-href="/produk/{id}" class="group relative overflow-hidden rounded-3xl bg-brand-50 p-6 flex items-center min-h-[190px] hover:bg-brand-100 transition">
+    <div class="relative z-10 w-3/5"><p data-t="sub" class="text-xs font-bold text-brand-600"></p><h3 data-t="nama" class="text-xl font-extrabold text-brand-800 mt-1 line-clamp-2"></h3><p data-t="harga|rp" class="mt-2 font-bold"></p>
+      <span class="inline-block mt-3 text-sm font-semibold text-brand-700 border border-brand-600 rounded-full px-4 py-1.5 group-hover:bg-brand-600 group-hover:text-white transition">Lihat produk</span></div>
+    <img class="absolute right-0 top-0 h-full w-2/5 object-cover [mask-image:linear-gradient(to_left,#000_60%,transparent)] group-hover:scale-105 transition duration-500" data-src="gambar" alt="">
+  </a>
+</template>
+
+<template id="t-fitur">
+  <div data-reveal class="rounded-2xl border border-slate-200 bg-white p-5 hover:border-brand-300 transition">
+    <div class="w-11 h-11 rounded-xl bg-brand-100 text-brand-700 grid place-items-center mb-3"><span data-a-data-ikon="{ikon}"></span></div>
+    <h3 data-t="judul" class="font-bold"></h3><p data-t="isi" class="text-sm text-slate-500 mt-1"></p>
+  </div>
+</template>
+
+<template id="t-info-kontak">
+  <li><a data-if="href" data-href="{href}" data-a-aria-label="{aksi}: {teks}" class="flex items-center gap-3 hover:text-white group"><span class="w-10 h-10 rounded-xl bg-brand-700 group-hover:bg-brand-600 grid place-items-center transition"><span data-a-data-ikon="{ikon}"></span></span><span data-t="teks" class="underline-offset-4 group-hover:underline"></span></a>
+    <div data-ifnot="href" class="flex items-center gap-3"><span class="w-10 h-10 rounded-xl bg-brand-700 grid place-items-center"><span data-a-data-ikon="{ikon}"></span></span><span data-t="teks"></span></div></li>
+</template>
+<template id="t-menu-kat"><li><a href="#katalog" data-a-data-kat="{nama}" data-t="nama" class="block px-4 py-2.5 text-sm hover:bg-brand-50 hover:text-brand-700"></a></li></template>
+<template id="t-opsi"><option data-t="nama" data-val="nama"></option></template>
+<template id="t-kosong-katalog"><p class="col-span-full text-center text-slate-500 py-16">Produk tidak ditemukan. Coba ubah filter pencarian.</p></template>
+<template id="t-gagal"><p class="col-span-full text-center text-slate-500 py-16" data-t="pesan"></p></template>
+<template id="t-auth-masuk"><a href="/masuk?next=landing" class="btn btn-p btn-besar">Masuk</a></template>
+<template id="t-auth-user"><a data-href="{beranda}" class="flex items-center gap-2 h-11 pl-1 pr-4 rounded-xl bg-brand-50 hover:bg-brand-100 text-sm font-semibold text-brand-800 transition"><span data-avatar></span><span class="hidden sm:inline">Dashboard</span></a></template>
+<template id="t-chat-kotak"><div class="bg-white text-slate-800 p-6 md:p-10 flex flex-col"><h3 class="font-extrabold text-lg">Chat dengan admin</h3><p class="text-sm text-slate-500 mb-3">Pesanmu langsung masuk ke admin dan balasannya muncul di sini.</p><div data-chat class="h-[420px] rounded-2xl border border-slate-100 overflow-hidden"></div></div></template>
+<template id="t-ajak-masuk"><p class="text-xs text-slate-500 text-center">Ingin chat langsung dengan admin dan melihat balasannya di sini? <a href="/masuk?next=landing" class="font-semibold text-brand-700 underline">Masuk dulu</a></p></template>
 
 <script src="/shared/core.js"></script><script src="/shared/chat.js"></script>
 <script src="/landing/script.js"></script>
