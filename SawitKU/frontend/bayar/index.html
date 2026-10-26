@@ -1,0 +1,95 @@
+<!doctype html><html lang="id"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="no-referrer"><meta name="robots" content="noindex"><link rel="icon" type="image/png" sizes="32x32" href="/shared/favicon-32.png"><link rel="icon" href="/shared/favicon.ico" sizes="any"><link rel="apple-touch-icon" href="/shared/apple-touch-icon.png">
+<title>Pembayaran | SawitKu</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script><script src="/shared/tailwind.js"></script><link rel="stylesheet" href="/shared/base.css"><link rel="stylesheet" href="/bayar/style.css">
+</head>
+<body class="font-sans text-slate-800 antialiased">
+<header class="bg-white border-b border-slate-100"><div class="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+  <a href="/" class="flex items-center gap-2 font-extrabold font-display text-xl text-brand-700"><img src="/shared/logo.png" alt="Logo SawitKu" width="48" height="48" class="w-9 h-9 rounded-xl object-cover">Sawit<span class="text-sun-500">Ku</span></a>
+  <a href="/dashboard#pesanan" class="btn btn-o"><span data-ikon="back" data-kelas="w-4 h-4"></span>Pesanan saya</a>
+</div></header>
+<main class="max-w-5xl mx-auto px-4 py-8" id="isi"><div class="h-80 rounded-3xl bg-brand-50 animate-pulse"></div></main>
+
+<!-- ===== Template (HTML) ===== -->
+<template id="t-bayar">
+  <div>
+    <div class="flex flex-wrap items-end justify-between gap-3 mb-6">
+      <div><h1 class="text-3xl md:text-4xl font-extrabold">Bayar pesanan #<span data-t="id"></span></h1><p class="text-slate-500 mt-1">Bayar sesuai nominal, lalu unggah bukti pembayaran agar admin bisa memeriksanya.</p></div>
+      <div class="text-right"><p class="text-sm text-slate-500">Bayar sebelum</p><p class="font-bold" data-t="batasBayar|wkt"></p><p class="text-sm font-semibold text-amber-700" id="hitung-mundur" aria-live="off"></p></div>
+    </div>
+    <div class="grid lg:grid-cols-5 gap-6 items-start">
+      <section class="lg:col-span-3 space-y-6">
+        <div data-if="ditolak" class="rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 px-5 py-4 text-sm" role="alert"><b>Bukti sebelumnya ditolak.</b> <span data-if="alasan">Alasan: <span data-t="alasan"></span>. </span>Unggah ulang bukti yang benar.</div>
+        <div class="panel">
+          <div class="flex items-center justify-between gap-3 flex-wrap"><h2 class="font-extrabold text-lg" data-t="label"></h2><span class="lencana" id="status-midtrans"></span></div>
+          <div id="area-tagihan" class="mt-4"></div>
+          <div class="mt-5 flex flex-wrap gap-2">
+            <button class="btn btn-o" data-aksi="cek"><span data-ikon="refresh" data-kelas="w-4 h-4"></span>Cek status pembayaran</button>
+            <button class="btn btn-o" data-aksi="ganti"><span data-ikon="card" data-kelas="w-4 h-4"></span>Ganti metode</button>
+          </div>
+        </div>
+        <div class="panel" id="panel-bukti">
+          <h2 class="font-extrabold text-lg">Unggah bukti pembayaran</h2>
+          <p class="text-sm text-slate-500 mt-1">Pesananmu <b>belum dianggap lunas</b> sampai admin memeriksa bukti ini. Cukup tangkapan layar atau foto struk yang menampilkan nominal dan waktu.</p>
+          <label class="mt-4 block rounded-2xl border-2 border-dashed border-brand-300 bg-brand-50/60 hover:bg-brand-50 p-6 text-center cursor-pointer transition">
+            <span data-ikon="upload" data-kelas="w-7 h-7 mx-auto text-brand-600"></span><span class="block mt-2 font-semibold text-brand-800">Pilih gambar bukti</span><span class="block text-xs text-slate-500">JPG, PNG, atau WEBP. Maksimal 2 MB.</span>
+            <input id="bk-file" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only">
+          </label>
+          <img id="bk-prev" class="hidden mt-4 max-h-64 rounded-xl mx-auto border border-slate-200" alt="Pratinjau bukti">
+          <p id="bk-err" class="text-sm text-rose-600 min-h-5 mt-2" role="alert"></p>
+          <button id="bk-kirim" class="btn btn-p btn-besar w-full" disabled>Kirim bukti pembayaran</button>
+        </div>
+      </section>
+      <aside class="lg:col-span-2 panel lg:sticky lg:top-6">
+        <h2 class="font-extrabold text-lg">Ringkasan</h2>
+        <ul class="mt-3 divide-y divide-slate-100"><template data-each="items"><li class="py-2.5 flex items-center gap-3"><img class="w-12 h-12 rounded-lg object-cover" data-src="gambar" alt=""><div class="min-w-0 flex-1 text-sm"><p class="font-semibold truncate" data-t="nama"></p><p class="text-slate-500"><span data-t="qty"></span> x <span data-t="harga|rp"></span></p></div></li></template></ul>
+        <div class="mt-3 border-t border-slate-200 pt-3 flex justify-between items-baseline"><span class="font-semibold">Total bayar</span><b class="text-2xl font-display text-brand-700" data-t="total|rp"></b></div>
+        <button class="btn btn-o w-full mt-3" data-aksi="salin-total"><span data-ikon="copy" data-kelas="w-4 h-4"></span>Salin nominal</button>
+        <p data-if="pengiriman" class="mt-4 text-xs text-slate-500">Dikirim ke <b data-t="pengiriman.penerima"></b>, <span data-t="pengiriman.alamat"></span>, <span data-t="pengiriman.kota"></span></p>
+      </aside>
+    </div>
+  </div>
+</template>
+
+<!-- Isi tagihan menurut jenis -->
+<template id="t-tagihan-qris">
+  <div class="grid sm:grid-cols-2 gap-5 items-center">
+    <div class="mx-auto w-full max-w-[16rem] p-3 rounded-2xl border-2 border-brand-200 bg-white"><img data-if="qrUrl" data-src="qrUrl" alt="Kode QRIS untuk dibayar" class="w-full aspect-square object-contain"><p data-ifnot="qrUrl" class="aspect-square grid place-items-center text-center text-sm text-slate-500 p-4">Gambar QR belum tersedia. Pakai kode di samping atau ganti metode.</p></div>
+    <div class="text-sm space-y-3"><ol class="list-decimal ml-5 space-y-1.5 text-slate-600"><li>Buka e-wallet atau m-banking yang mendukung QRIS.</li><li>Pindai kode QR di samping.</li><li>Pastikan nominal sama, lalu bayar.</li><li>Tangkap layar bukti dan unggah di bawah.</li></ol>
+      <button data-if="qrString" class="btn btn-o" data-aksi="salin" data-a-data-teks="{qrString}"><span data-ikon="copy" data-kelas="w-4 h-4"></span>Salin kode QRIS</button></div>
+  </div>
+</template>
+<template id="t-tagihan-va">
+  <div class="rounded-2xl bg-brand-50 p-5"><p class="text-sm text-slate-600">Nomor Virtual Account <b data-t="bank" class="uppercase"></b></p>
+    <div class="mt-1 flex items-center gap-3 flex-wrap"><b class="kotak-kode text-3xl font-display text-brand-900 break-all" data-t="va"></b><button class="btn btn-p" data-aksi="salin" data-a-data-teks="{va}"><span data-ikon="copy" data-kelas="w-4 h-4"></span>Salin</button></div>
+    <ol class="list-decimal ml-5 mt-4 space-y-1.5 text-sm text-slate-600"><li>Buka m-banking atau ATM, pilih transfer ke Virtual Account.</li><li>Masukkan nomor di atas dan pastikan nominal sama.</li><li>Simpan bukti transfer, lalu unggah di bawah.</li></ol></div>
+</template>
+<template id="t-tagihan-bill">
+  <div class="rounded-2xl bg-brand-50 p-5 space-y-4 text-sm"><div><p class="text-slate-600">Kode perusahaan</p><div class="flex items-center gap-3"><b class="kotak-kode text-2xl font-display" data-t="kodePerusahaan"></b><button class="btn btn-o" data-aksi="salin" data-a-data-teks="{kodePerusahaan}"><span data-ikon="copy" data-kelas="w-4 h-4"></span>Salin</button></div></div>
+    <div><p class="text-slate-600">Kode pembayaran</p><div class="flex items-center gap-3 flex-wrap"><b class="kotak-kode text-2xl font-display break-all" data-t="kodeBayar"></b><button class="btn btn-p" data-aksi="salin" data-a-data-teks="{kodeBayar}"><span data-ikon="copy" data-kelas="w-4 h-4"></span>Salin</button></div></div>
+    <p class="text-slate-600">Di Livin' by Mandiri atau ATM Mandiri pilih Bayar, Multipayment, lalu masukkan kedua kode di atas.</p></div>
+</template>
+
+<!-- Status akhir: bukti sudah terkirim / pesanan tidak bisa dibayar -->
+<template id="t-menunggu">
+  <div class="panel max-w-xl mx-auto text-center py-10"><span class="w-14 h-14 mx-auto rounded-full bg-sky-100 text-sky-700 grid place-items-center"><span data-ikon="clock" data-kelas="w-7 h-7"></span></span>
+    <h1 class="text-2xl font-extrabold mt-4">Bukti pembayaran terkirim</h1><p class="text-slate-600 mt-2">Admin sedang memeriksa bukti pembayaran pesanan #<span data-t="id"></span> senilai <b data-t="total|rp"></b>. Kamu akan melihat statusnya berubah di halaman pesanan.</p>
+    <a href="/dashboard#pesanan" class="btn btn-p btn-besar mt-6">Lihat pesanan saya</a></div>
+</template>
+<template id="t-tak-bisa">
+  <div class="panel max-w-xl mx-auto text-center py-10"><h1 class="text-2xl font-extrabold" data-t="judul"></h1><p class="text-slate-600 mt-2" data-t="isi"></p><a href="/dashboard#pesanan" class="btn btn-p btn-besar mt-6">Lihat pesanan saya</a></div>
+</template>
+
+<!-- Pilih metode (dipakai saat ganti metode) -->
+<template id="t-ganti-metode">
+  <form class="p-6 space-y-3"><h2 class="font-extrabold text-lg">Ganti metode pembayaran</h2><p class="text-sm text-slate-500">Tagihan lama dibatalkan dan tagihan baru dibuat untuk nominal yang sama.</p>
+    <div id="daftar-metode" class="space-y-2"></div><p id="gm-err" class="text-sm text-rose-600 min-h-5" role="alert"></p>
+    <div class="flex justify-end gap-2"><button type="button" data-tutup class="btn btn-o">Batal</button><button class="btn btn-p">Pakai metode ini</button></div></form>
+</template>
+<template id="t-opsi-metode"><label class="opsi-bayar"><input type="radio" name="metode" data-a-value="{kode}" data-cls="dipilih=checked"><span data-a-data-ikon="{ikon}"></span><span class="font-semibold text-sm" data-t="label"></span></label></template>
+
+<script src="/shared/core.js"></script><script src="/bayar/script.js"></script>
+</body></html>
