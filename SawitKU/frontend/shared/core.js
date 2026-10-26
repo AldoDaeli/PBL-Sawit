@@ -1,18 +1,20 @@
 'use strict';
-/* ===== Inti bersama: konfigurasi, keamanan, sesi, API (REST ke backend Flask), UI, grafik, kerangka dashboard =====
+/* ===== Inti bersama: konfigurasi, keamanan, sesi JWT, API (REST ke Flask), binder template HTML, UI, grafik, kerangka dashboard =====
+   Pembagian tugas: HTML (struktur) ada di <template> tiap halaman, JS hanya mengisi data lewat T (lihat bagian "Binder template").
    Semua fungsi Api bersifat asinkron (return Promise): panggil dengan `await`. */
 const ROOT = '/';   // semua tautan memakai URL pendek dari akar situs: /masuk, /daftar, /dashboard, /admin, /produk/<id>
-const CFG = { SESI_MENIT: 20, MAKS_GAGAL: 5, BLOKIR_MENIT: 5, BATAS_BAYAR_JAM: 24, MAKS_MB: 2 };
+const CFG = { SESI_MENIT: 20, MAKS_GAGAL: 5, BLOKIR_MENIT: 5, BATAS_BAYAR_JAM: 24, AUTO_TERIMA_JAM: 24, MAKS_MB: 2 };
 const KATEGORI = ['Tanaman Hias Daun', 'Tanaman Berbunga', 'Sukulen & Kaktus', 'Tanaman Gantung', 'Pot & Media Tanam', 'Perawatan'];   // sama dengan backend (app/config.py)
 const NEXT = { landing: '', customer: 'dashboard', admin: 'admin' };   // dipakai sebagai ROOT + NEXT[x]
 const STATUS = {
-  menunggu_bayar: ['Menunggu Pembayaran', 'proses', 'bg-amber-100 text-amber-700'],
-  menunggu_verifikasi: ['Menunggu Verifikasi', 'proses', 'bg-sky-100 text-sky-700'],
-  diproses: ['Sedang Dikemas', 'proses', 'bg-indigo-100 text-indigo-700'],
-  dikirim: ['Dalam Pengiriman', 'proses', 'bg-violet-100 text-violet-700'],
-  selesai: ['Selesai', 'selesai', 'bg-brand-100 text-brand-700'],
-  dibatalkan: ['Dibatalkan', 'batal', 'bg-rose-100 text-rose-700'],
+  menunggu_bayar: ['Menunggu Pembayaran', 'proses', 'bg-amber-100 text-amber-800'],
+  menunggu_verifikasi: ['Menunggu Verifikasi', 'proses', 'bg-sky-100 text-sky-800'],
+  diproses: ['Sedang Dikemas', 'proses', 'bg-indigo-100 text-indigo-800'],
+  dikirim: ['Dalam Pengiriman', 'proses', 'bg-violet-100 text-violet-800'],
+  selesai: ['Selesai', 'selesai', 'bg-brand-100 text-brand-800'],
+  dibatalkan: ['Dibatalkan', 'batal', 'bg-rose-100 text-rose-800'],
 };
+const namaStatus = o => o.status === 'dikirim' && o.waktu && o.waktu.sampai ? 'Barang Tiba' : STATUS[o.status][0];
 
 /* ---------- Keamanan ---------- */
 const K = {
@@ -40,19 +42,39 @@ const K = {
       im.onerror = () => { URL.revokeObjectURL(u); no(new Error('Gambar tidak dapat dibaca.')); }; im.src = u;
     });
   },
+  // Salin teks ke clipboard (dengan cadangan untuk konteks tanpa Clipboard API)
+  async salin(teks) {
+    try { await navigator.clipboard.writeText(teks); return true; } catch {}
+    const t = document.createElement('textarea'); t.value = teks; t.style.cssText = 'position:fixed;opacity:0'; document.body.append(t); t.select();
+    try { return document.execCommand('copy'); } catch { return false; } finally { t.remove(); }
+  },
 };
 
-/* ---------- Sesi & RBAC ----------
-   Token Bearer dari server disimpan di sessionStorage (hilang saat tab ditutup). `user` hanya cache untuk tampilan;
-   kebenaran dan hak akses selalu diputuskan server. Server memperpanjang sesi (sliding) di setiap permintaan. */
+/* ---------- Sesi (JWT) & RBAC ----------
+   Token JWT dari server disimpan di localStorage dalam DUA slot terpisah, satu per peran: `tp_sesi_admin` dan `tp_sesi_customer`.
+   - Tab baru / salin link langsung masuk: halaman admin membaca slot admin, halaman customer membaca slot customer.
+   - Admin dan customer boleh login bersamaan di tab berbeda (slotnya tidak saling menimpa). Satu browser hanya punya SATU admin dan SATU customer:
+     login ulang pada peran yang sama menggantikan sesi lama (tidak ada customer1 di tab 1 dan customer2 di tab 2). Untuk itu pakai browser/profil lain.
+   - Keluar di satu tab menghapus slot perannya, sehingga semua tab peran itu ikut keluar; tab peran lain tidak terpengaruh.
+   - Halaman publik (landing, produk) memakai sesi customer bila ada, jika tidak sesi admin.
+   Masa berlaku ditentukan server (JWT `exp` + tabel `sesi`, batas diam SESI_MENIT), bukan oleh jenis penyimpanan: token lama ditolak server lalu dibuang.
+   `user` hanya cache tampilan; hak akses selalu diputuskan server. Server mencabut token saat keluar dan memperpanjang sesi
+   lewat header X-Token-Baru selama pengguna aktif. */
 const Sesi = {
-  KEY: 'tp_sesi',
-  baca() { try { const s = JSON.parse(sessionStorage.getItem(this.KEY)); if (s && s.token && s.user) return s; } catch {} sessionStorage.removeItem(this.KEY); return null; },
+  PERAN: ['customer', 'admin'], konteks: null, dijaga: null, _akhirCatat: 0, _tampil: null,
+  _ls: { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} }, del(k) { try { localStorage.removeItem(k); } catch {} } },
+  _kunci: peran => 'tp_sesi_' + peran, _kunciAktif: peran => 'tp_aktif_' + peran,
+  _baca(peran) { try { const s = JSON.parse(this._ls.get(this._kunci(peran))); if (s && s.token && s.user && s.user.peran === peran) return s; } catch {} this._ls.del(this._kunci(peran)); return null; },
+  // Slot yang dipakai halaman ini: halaman dashboard = perannya sendiri; halaman publik = customer dulu, lalu admin
+  slot() { return this.konteks || this.PERAN.find(p => this._baca(p)) || null; },
+  baca() { const p = this.slot(); return p ? this._baca(p) : null; },
   token() { const s = this.baca(); return s ? s.token : null; },
   user() { const s = this.baca(); return s ? s.user : null; },
-  mulai(token, user) { sessionStorage.setItem(this.KEY, JSON.stringify({ token, user })); },
-  simpanUser(user) { const s = this.baca(); if (s) { s.user = user; sessionStorage.setItem(this.KEY, JSON.stringify(s)); } },
-  hapus() { sessionStorage.removeItem(this.KEY); },
+  mulai(token, user) { this._ls.set(this._kunci(user.peran), JSON.stringify({ token, user })); this.catatAktif(true, user.peran); },
+  simpanUser(user) { const s = this._baca(user.peran); if (s) { s.user = user; this._ls.set(this._kunci(user.peran), JSON.stringify(s)); } },
+  tukarToken(token, lama) { for (const p of this.PERAN) { const s = this._baca(p); if (s && s.token === lama && token !== lama) { s.token = token; this._ls.set(this._kunci(p), JSON.stringify(s)); } } },
+  hapus(peran = this.slot()) { if (!peran) return; this._ls.del(this._kunci(peran)); this._ls.del(this._kunciAktif(peran)); },
+  catatAktif(paksa, peran = this.slot()) { const n = Date.now(); if (peran && (paksa || n - this._akhirCatat > 5000)) { this._akhirCatat = n; this._ls.set(this._kunciAktif(peran), String(n)); } },
   // Cocokkan cache dengan server; bila token sudah tidak berlaku, cache dibuang (tanpa pengalihan halaman)
   async segarkan() {
     if (!this.token()) return null;
@@ -64,21 +86,37 @@ const Sesi = {
   },
   beranda: p => ROOT + (p === 'admin' ? NEXT.admin : NEXT.customer),
   async wajib(peran) { // penjaga halaman: belum login / peran salah -> dialihkan
+    this.konteks = peran; this._tampil = this.user()?.id ?? null;
     if (!this.user()) { location.replace(ROOT + 'masuk?next=' + peran); return null; }
     let u; try { u = await Api.saya(); } catch (e) { if (e.status !== 401) Toast.err(e.message); return null; }   // 401 -> Api sudah mengalihkan ke login
     if (u.peran !== peran) { location.replace(this.beranda(u.peran)); return null; }
-    let aktifTerakhir = Date.now(), ping = Date.now();
+    this.dijaga = u.id; this.catatAktif(true);
+    let ping = Date.now();
     ['click', 'keydown', 'mousemove', 'touchstart'].forEach(e => addEventListener(e, () => {
-      aktifTerakhir = Date.now();
+      this.catatAktif();
       if (Date.now() - ping > 120000) { ping = Date.now(); Api.saya(true).catch(() => {}); }   // jaga sesi server tetap hidup selama pengguna aktif
     }, { passive: true }));
-    setInterval(() => { if (Date.now() - aktifTerakhir > CFG.SESI_MENIT * 60000) this.keluar(true); }, 15000);
+    // batas diam dihitung dari aktivitas terakhir pada peran ini (di tab mana pun)
+    setInterval(() => { if (Date.now() - (+this._ls.get(this._kunciAktif(peran)) || Date.now()) > CFG.SESI_MENIT * 60000) this.keluar(true); }, 15000);
     return u;
   },
 };
+Sesi._tampil = Sesi.user()?.id ?? null;
+// Sinkron antar tab: masuk/keluar pada satu peran langsung berlaku di tab lain yang memakai peran itu
+addEventListener('storage', e => {
+  if (!e.key || !e.key.startsWith('tp_sesi_')) return;
+  const id = Sesi.user()?.id ?? null; if (id === Sesi._tampil) return;      // token diperpanjang saja: tidak ada yang perlu dilakukan
+  Sesi._tampil = id;
+  if (Sesi.dijaga !== null) {                       // halaman yang butuh login
+    if (id === null) location.replace(ROOT + 'masuk?habis=1');   // keluar di tab lain
+    else location.reload();                          // akun lain masuk di tab lain
+    return;
+  }
+  document.dispatchEvent(new CustomEvent('sesi-berubah', { detail: Sesi.user() }));   // halaman publik: perbarui tombol masuk/keranjang
+});
 
-/* ---------- API (REST ke backend Flask; satu fungsi = satu endpoint) ---------- */
-const API_BASE = '/api';   // frontend dilayani Flask dari origin yang sama
+/* ---------- API (REST ke Flask; satu fungsi = satu endpoint) ---------- */
+const API_BASE = '/api';   // frontend dilayani dari origin yang sama dengan API
 const qs = p => { const q = new URLSearchParams(Object.entries(p || {}).filter(([, v]) => v)).toString(); return q ? '?' + q : ''; };
 const Api = {
   async _req(method, path, body, { diam } = {}) {
@@ -88,6 +126,7 @@ const Api = {
     let r, j = null;
     try { r = await fetch(API_BASE + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) }); }
     catch { throw new Error('Tidak dapat terhubung ke server. Coba lagi nanti.'); }
+    const baru = r.headers.get('X-Token-Baru'); if (baru && t) Sesi.tukarToken(baru, t);   // sesi diperpanjang server: ganti token di semua tab
     try { j = await r.json(); } catch {}
     if (!r.ok) {
       if (r.status === 401 && t && !diam) Sesi.keluar(true);   // sesi berakhir di server
@@ -134,11 +173,16 @@ const Api = {
   kerAdd: (pid, qty = 1) => Api._req('POST', '/keranjang', { produkId: pid, qty }),
   kerSet: (pid, qty) => Api._req('PUT', '/keranjang/' + pid, { qty }),
   kerHapus: pid => Api._req('DELETE', '/keranjang/' + pid),
-  checkout: a => Api._req('POST', '/checkout', a),   // a = {penerima, telepon, alamat, kota, kodePos, simpan}; harga & stok dihitung server
+  checkout: a => Api._req('POST', '/checkout', a),   // a = {metode, penerima, telepon, alamat, kota, kodePos, simpan}; harga & stok dihitung server
   pesananSaya: () => Api._req('GET', '/pesanan/saya'),
-  bayar: (id, bukti) => Api._req('POST', `/pesanan/${id}/bayar`, { bukti }),
+  pesananById: async id => (await Api.pesananSaya()).find(o => o.id === Number(id)) || null,
   batal: id => Api._req('POST', `/pesanan/${id}/batal`),
-  terima: id => Api._req('POST', `/pesanan/${id}/terima`),
+  terima: (id, foto) => Api._req('POST', `/pesanan/${id}/terima`, foto ? { foto } : {}),   // foto barang tiba bersifat opsional
+  /* --- pembayaran Midtrans: QR / nomor VA ditampilkan di halaman sendiri, lalu wajib unggah bukti --- */
+  metodeBayar: async () => (await Api._req('GET', '/pembayaran/metode')).metode,   // [{kode, label, jenis}]
+  buatTagihan: (id, metode) => Api._req('POST', `/pesanan/${id}/pembayaran`, metode ? { metode } : {}),
+  cekTagihan: id => Api._req('POST', `/pesanan/${id}/pembayaran/cek`),
+  kirimBukti: (id, bukti) => Api._req('POST', `/pesanan/${id}/bukti`, { bukti }),
   kirimUlasan: (pid, rating, teks) => Api._req('POST', '/ulasan', { produkId: pid, rating, teks }),
   async sudahUlas(pid) { return Sesi.user() && pid != null ? (await this._req('GET', '/ulasan/sudah/' + pid)).sudah : false; },
   async profil({ username, email, foto, telepon, alamat, kota, kodePos }) {
@@ -149,9 +193,9 @@ const Api = {
   adminPesanan: () => Api._req('GET', '/admin/pesanan'),
   verifikasi: (id, setuju, alasan) => Api._req('POST', `/admin/pesanan/${id}/verifikasi`, { setuju: !!setuju, alasan }),
   kirimPesanan: (id, kurir, resi) => Api._req('POST', `/admin/pesanan/${id}/kirim`, { kurir, resi }),
+  tandaiSampai: id => Api._req('POST', `/admin/pesanan/${id}/sampai`),
+  adminCekMidtrans: id => Api._req('POST', `/admin/pesanan/${id}/midtrans/cek`),
   lacak: kode => Api._req('GET', '/lacak?kode=' + encodeURIComponent(kode)),
-  midtransBuat: id => Api._req('POST', `/pesanan/${id}/midtrans`),
-  midtransCek: id => Api._req('POST', `/pesanan/${id}/midtrans/cek`),
   balasUlasan: (id, teks) => Api._req('POST', `/ulasan/${id}/balas`, { teks }),
   produkSimpan(f) {
     const b = { nama: f.nama, kategori: f.kategori, harga: f.harga, stok: f.stok, gambar: f.gambar, deskripsi: f.deskripsi, spek: f.spek, bestSeller: !!f.bestSeller };
@@ -165,61 +209,98 @@ const Api = {
   pesanKontak: () => Api._req('GET', '/admin/kontak'),
 };
 
-/* ---------- UI ---------- */
+/* ---------- Format & ikon ---------- */
 const rp = n => 'Rp' + Math.round(n).toLocaleString('id-ID');
 const tgl = (t, pendek) => new Date(t).toLocaleDateString('id-ID', pendek ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' });
+const wkt = t => t ? new Date(t).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : '';
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const PATH = {
-  home: 'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10', cart: 'M9 21h.01 M20 21h.01 M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6',
-  heart: 'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.2l7.8-7.7 1-1.1a5.5 5.5 0 0 0 0-7.8z',
-  user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
-  users: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z M23 21v-2a4 4 0 0 0-3-3.9 M16 3.1a4 4 0 0 1 0 7.8',
-  box: 'M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z M3.3 7L12 12l8.7-5 M12 22V12',
-  chart: 'M18 20V10 M12 20V4 M6 20v-6', out: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9', menu: 'M3 12h18 M3 6h18 M3 18h18',
-  search: 'M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16z M21 21l-4.3-4.3', check: 'M20 6L9 17l-5-5', x: 'M18 6L6 18 M6 6l12 12', plus: 'M12 5v14 M5 12h14',
-  star: 'M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.9L12 17.8 5.8 21l1.2-6.9-5-4.9 6.9-1z', card: 'M3 4h18a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M1 10h22',
-  msg: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', edit: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7 M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z',
-  trash: 'M3 6h18 M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6 M10 11v6 M14 11v6 M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2',
-  phone: 'M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z',
-  lock: 'M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z M7 11V7a5 5 0 0 1 10 0v4', mail: 'M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M22 6l-10 7L2 6',
-  eye: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
-  leaf: 'M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.5 19 2c1 2 2 4.2 2 8 0 5.5-4.8 10-10 10z M2 21c0-3 1.9-5.4 5.1-6C9.5 14.5 12 13 13 12',
-  clock: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z M12 6v6l4 2', upload: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8l-5-5-5 5 M12 3v12',
-  shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z', trend: 'M23 6l-9.5 9.5-5-5L1 18 M17 6h6v6', chev: 'M6 9l6 6 6-6', truck: 'M1 3h15v13H1z M16 8h4l3 3v5h-7z M5.5 16a2 2 0 1 0 0 4 2 2 0 0 0 0-4z M18.5 16a2 2 0 1 0 0 4 2 2 0 0 0 0-4z',
-};
-const I = (n, c = 'w-5 h-5') => `<svg class="${c} shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${PATH[n] || ''}"/></svg>`;
-const bintang = r => { const p = Math.round(r); return `<span class="text-sun-500 tracking-tight" aria-label="Rating ${r} dari 5">${'★'.repeat(p)}<span class="text-slate-300">${'★'.repeat(5 - p)}</span></span>`; };
+// Ikon dari sprite /shared/icons.svg (satu berkas, di-cache browser)
+const I = (n, c = 'w-5 h-5') => `<svg class="ic ${c}" aria-hidden="true"><use href="/shared/icons.svg#${n}"/></svg>`;
+const ikon = (akar = document) => $$('[data-ikon]', akar).forEach(e => { if (!e.dataset.sudah) { e.dataset.sudah = 1; e.insertAdjacentHTML('afterbegin', I(e.dataset.ikon, e.dataset.kelas || 'w-5 h-5')); } });
+// Bintang rating 1-5 (nilai dibulatkan). Produk tanpa ulasan memakai ratingTeks() -> "Belum ada ulasan"
+const bintang = r => { const p = Math.round(r || 0); return `<span class="bintang" role="img" aria-label="Rating ${r || 0} dari 5">${[1, 2, 3, 4, 5].map(i => `<svg class="ic ic-isi ${i > p ? 'mati' : ''}" aria-hidden="true"><use href="/shared/icons.svg#star"/></svg>`).join('')}</span>`; };
+const ratingTeks = p => p.jumlahUlasan ? `${Number(p.rating).toFixed(1)} (${p.jumlahUlasan} ulasan)` : 'Belum ada ulasan';
 const avatar = (u, c = 'w-10 h-10') => u.foto && K.url(u.foto) ? `<img src="${K.url(u.foto)}" alt="" class="${c} rounded-full object-cover">` : `<span class="${c} rounded-full bg-brand-600 text-white grid place-items-center font-bold uppercase shrink-0">${K.esc(u.username[0])}</span>`;
-const badgeStatus = s => `<span class="px-2.5 py-1 rounded-full text-xs font-semibold ${STATUS[s][2]}">${STATUS[s][0]}</span>`;
+const badgeStatus = o => `<span class="lencana ${STATUS[o.status][2]}">${K.esc(namaStatus(o))}</span>`;
+
+/* ---------- Binder template ----------
+   HTML hidup di <template id="t-..."> pada berkas .html; JS hanya memanggil T.klon('t-...', data). Atribut:
+     data-t="jalur|filter"          isi teks            data-src="jalur"        gambar (disaring K.url)
+     data-href="/produk/{id}"       tautan              data-a-NAMA="{jalur}"   atribut apa saja (aria-label, title, ...)
+     data-if / data-ifnot="jalur"   hapus elemen bila salah/benar                data-cls="jalur=kelas kelas;!jalur=kelas"
+     data-stars="jalur"             bintang rating      data-val="jalur"        nilai input
+     <template data-each="jalur">   ulangi isinya untuk tiap anggota larik
+   Semua nilai masuk lewat textContent / setAttribute, tidak pernah innerHTML, jadi data pengguna tidak bisa menjadi XSS. */
+const T = {
+  filter: { rp: v => rp(v || 0), tgl: v => v ? tgl(v) : '', wkt, n: v => Number(v || 0).toLocaleString('id-ID'), rating: v => Number(v || 0).toFixed(1), status: v => STATUS[v] ? STATUS[v][0] : v },
+  ambil(d, ekspr) {
+    const [jalur, ...fs] = String(ekspr).trim().split('|'); let v = jalur === '.' ? d : jalur.split('.').reduce((a, k) => a == null ? undefined : a[k], d);
+    for (const f of fs) v = (T.filter[f.trim()] || (x => x))(v, d); return v;
+  },
+  _tpl: (s, d) => String(s).replace(/\{([^}]+)\}/g, (_, e) => { const v = T.ambil(d, e); return v == null ? '' : v; }),
+  isi(akar, d) {
+    const semua = (akar.nodeType === 1 ? [akar] : []).concat($$('*', akar));
+    for (const el of semua) {
+      if (el !== akar && !akar.contains(el)) continue;          // sudah terhapus bersama induknya
+      if (el.tagName === 'TEMPLATE' && el.hasAttribute('data-each')) {
+        for (const item of T.ambil(d, el.getAttribute('data-each')) || []) { const f = el.content.cloneNode(true); T.isi(f, { ...d, ...item, _induk: d }); el.before(f); }
+        el.remove(); continue;
+      }
+      if (el.hasAttribute('data-if') && !T.ambil(d, el.getAttribute('data-if'))) { el.remove(); continue; }
+      if (el.hasAttribute('data-ifnot') && T.ambil(d, el.getAttribute('data-ifnot'))) { el.remove(); continue; }
+      for (const a of [...el.attributes]) {
+        const n = a.name, v = a.value;
+        if (n === 'data-t') el.textContent = T.ambil(d, v) ?? '';
+        else if (n === 'data-src') { const u = K.url(T.ambil(d, v)); if (u) el.setAttribute('src', u); else el.removeAttribute('src'); }
+        else if (n === 'data-href') el.setAttribute('href', T._tpl(v, d));
+        else if (n === 'data-val') el.value = T.ambil(d, v) ?? '';
+        else if (n === 'data-stars') el.innerHTML = bintang(T.ambil(d, v));
+        else if (n === 'data-cls') v.split(';').forEach(r => { const i = r.indexOf('='), neg = r.startsWith('!'), k = r.slice(neg ? 1 : 0, i), on = !!T.ambil(d, k); if (on !== neg) el.classList.add(...r.slice(i + 1).split(' ').filter(Boolean)); });
+        else if (n.startsWith('data-a-')) el.setAttribute(n.slice(7), T._tpl(v, d));
+      }
+    }
+    return akar;
+  },
+  klon(id, d = {}) { const t = document.getElementById(id); if (!t) throw new Error('Template tidak ada: ' + id); const f = t.content.cloneNode(true); T.isi(f, d); ikon(f); return f; },
+  satu(id, d) { return T.klon(id, d).firstElementChild; },
+  daftar(induk, id, larik, kosongId) { induk.replaceChildren(...(larik.length ? larik.map((x, i) => { const e = T.satu(id, { ...x, _i: i }); e.style.animationDelay = Math.min(i, 10) * 45 + 'ms'; return e; }) : kosongId ? [T.satu(kosongId, {})] : [])); },
+};
 
 const Toast = {
   tampil(pesan, tipe = 'ok') {
-    let w = $('#toast-w'); if (!w) { w = document.createElement('div'); w.id = 'toast-w'; w.className = 'fixed top-4 right-4 z-[100] flex flex-col gap-2 w-[min(92vw,340px)]'; document.body.append(w); }
+    let w = $('#toast-w'); if (!w) { w = document.createElement('div'); w.id = 'toast-w'; w.className = 'fixed top-4 right-4 z-[100] flex flex-col gap-2 w-[min(92vw,340px)]'; w.setAttribute('role', 'status'); document.body.append(w); }
     const t = document.createElement('div'), warna = tipe === 'err' ? 'border-rose-400 text-rose-700' : 'border-brand-500 text-brand-800';
     t.className = `animate-slide-in bg-white shadow-xl rounded-xl border-l-4 ${warna} px-4 py-3 text-sm font-medium flex gap-2 items-start`;
-    t.setAttribute('role', 'status'); t.innerHTML = `<span>${tipe === 'err' ? '✕' : '✓'}</span><span>${K.esc(pesan)}</span>`; w.append(t);
-    setTimeout(() => { t.style.transition = 'opacity .3s'; t.style.opacity = 0; setTimeout(() => t.remove(), 300); }, 3200);
+    const ik = document.createElement('span'), tx = document.createElement('span'); ik.textContent = tipe === 'err' ? '✕' : '✓'; tx.textContent = pesan; t.append(ik, tx); w.append(t);
+    setTimeout(() => { t.style.transition = 'opacity .3s'; t.style.opacity = 0; setTimeout(() => t.remove(), 300); }, 3600);
   },
   ok: m => Toast.tampil(m), err: m => Toast.tampil(m, 'err'),
 };
 const Modal = {
-  buka(html, lebar = 'max-w-lg') {
+  // `isi` = string HTML statis ATAU Node/DocumentFragment dari T.klon (disarankan)
+  buka(isi, lebar = 'max-w-lg') {
     const m = document.createElement('div'); m.className = 'fixed inset-0 z-[90] grid place-items-center p-4 animate-fade-in';
-    m.innerHTML = `<div data-tutup class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div><div class="relative bg-white rounded-2xl shadow-2xl w-full ${lebar} max-h-[90vh] overflow-y-auto animate-pop" role="dialog" aria-modal="true">${html}</div>`;
+    const lat = document.createElement('div'); lat.dataset.tutup = ''; lat.className = 'absolute inset-0 bg-slate-900/50 backdrop-blur-sm';
+    const kotak = document.createElement('div'); kotak.className = `relative bg-white rounded-2xl shadow-2xl w-full ${lebar} max-h-[90vh] overflow-y-auto animate-pop`; kotak.setAttribute('role', 'dialog'); kotak.setAttribute('aria-modal', 'true');
+    if (typeof isi === 'string') kotak.innerHTML = isi; else kotak.append(isi);
+    m.append(lat, kotak);
     const tutup = () => { m.remove(); removeEventListener('keydown', esc); }, esc = e => e.key === 'Escape' && tutup();
-    m.addEventListener('click', e => { if (e.target.closest('[data-tutup]')) tutup(); }); addEventListener('keydown', esc); document.body.append(m); m.tutup = tutup; return m;
+    m.addEventListener('click', e => { if (e.target.closest('[data-tutup]')) tutup(); }); addEventListener('keydown', esc); document.body.append(m); m.tutup = tutup;
+    const f = $('[autofocus],input,textarea,select,button:not([data-tutup])', kotak); if (f) f.focus({ preventScroll: true }); return m;
   },
+  dari: (id, d, lebar) => Modal.buka(T.klon(id, d), lebar),
   konfirmasi(pesan, tombol = 'Ya, lanjutkan') {
-    return new Promise(ok => { const m = this.buka(`<div class="p-6"><p class="font-semibold text-slate-800">${K.esc(pesan)}</p><div class="flex justify-end gap-2 mt-6"><button data-tutup class="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-100 hover:bg-slate-200">Batal</button><button id="mk-ya" class="px-4 py-2 rounded-xl text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">${K.esc(tombol)}</button></div></div>`, 'max-w-sm');
-      $('#mk-ya', m).onclick = () => { m.tutup(); ok(true); }; m.addEventListener('click', e => e.target.closest('[data-tutup]') && ok(false)); });
+    return new Promise(ok => { const m = this.dari('t-konfirmasi', { pesan, tombol }, 'max-w-sm');
+      $('[data-ya]', m).onclick = () => { m.tutup(); ok(true); }; m.addEventListener('click', e => e.target.closest('[data-tutup]') && ok(false)); });
   },
 };
 // Gambar rusak diganti placeholder (tanpa atribut onerror inline agar sesuai CSP)
 document.addEventListener('error', e => { const t = e.target; if (t.tagName === 'IMG' && !t.dataset.gagal) { t.dataset.gagal = 1; t.src = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="400" height="400" fill="#dcf1e1"/><path d="M200 300c-40-20-60-60-50-110 30 0 60 20 70 50 10-40 40-70 80-80 10 60-20 120-100 140z" fill="#5ab37c"/></svg>'); } }, true);
 const Animasi = {
   reveal() { const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('tampil'); io.unobserve(e.target); } }), { threshold: .12 });
-    $$('[data-reveal]:not(.tampil)').forEach((el, i) => { el.style.transitionDelay = (el.dataset.delay || 0) + 'ms'; io.observe(el); }); },
+    $$('[data-reveal]:not(.tampil)').forEach(el => { el.style.transitionDelay = (el.dataset.delay || 0) + 'ms'; io.observe(el); }); },
   hitung(el, akhir, fmt = v => Math.round(v).toLocaleString('id-ID'), dur = 900) {
+    if (matchMedia('(prefers-reduced-motion:reduce)').matches) { el.textContent = fmt(akhir); return; }
     const t0 = performance.now(); (function f(t) { const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3); el.textContent = fmt(akhir * e); if (p < 1) requestAnimationFrame(f); })(t0);
   },
 };
@@ -237,24 +318,45 @@ const Grafik = {
   _sumbu(top, t, L, W, H, T, B) { let g = ''; for (let i = 0; i <= t; i++) { const y = T + (H - T - B) * (1 - i / t); g += `<line x1="${L}" x2="${W - 8}" y1="${y}" y2="${y}" stroke="#e2e8f0" stroke-dasharray="3 4"/><text x="${L - 6}" y="${y + 4}" text-anchor="end" font-size="10" fill="#94a3b8">${Grafik.singkat(top * i / t)}</text>`; } return g; },
   _label(labels, x, H) { const st = Math.ceil(labels.length / 10); return labels.map((l, i) => i % st ? '' : `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="#94a3b8">${K.esc(l)}</text>`).join(''); },
   _kosong: (W, H) => `<text x="${W / 2}" y="${H / 2 - 6}" text-anchor="middle" font-size="12" fill="#94a3b8">Belum ada data pada rentang ini</text>`,
-  bar(el, labels, seri) {
+  // Tooltip interaktif: klik/sentuh (HP) atau arahkan kursor pada batang/titik/irisan -> muncul gelembung berisi nilai. Klik di luar menutupnya.
+  _pasang(el) {
+    el.style.position = 'relative'; el.querySelector('.tip-grafik')?.remove();
+    const tip = document.createElement('div'); tip.className = 'tip-grafik'; tip.setAttribute('role', 'status'); el.append(tip);
+    let kunci = null; const tutup = () => { tip.classList.remove('on'); el.querySelectorAll('.hit.on').forEach(h => h.classList.remove('on')); kunci = null; };
+    const buka = (h, e) => {
+      el.querySelectorAll('.hit.on').forEach(x => x.classList.remove('on')); h.classList.add('on');
+      const [judul, ...baris] = h.dataset.tip.split('||'); tip.innerHTML = `<b>${K.esc(judul)}</b>${baris.map(b => `<span>${K.esc(b)}</span>`).join('')}`;
+      const er = el.getBoundingClientRect(), svg = h.ownerSVGElement, sr = svg.getBoundingClientRect(), k = sr.width / svg.viewBox.baseVal.width;
+      let x = h.dataset.ax ? sr.left - er.left + h.dataset.ax * k : e.clientX - er.left, y = h.dataset.ay ? sr.top - er.top + h.dataset.ay * k : e.clientY - er.top;
+      tip.classList.add('on'); const w = tip.offsetWidth, hh = tip.offsetHeight;
+      x = Math.min(Math.max(x, w / 2 + 4), er.width - w / 2 - 4); y = y - hh - 10; if (y < 0) y = y + hh + 24;
+      tip.style.left = x + 'px'; tip.style.top = y + 'px';
+    };
+    if (el._tipPasang) return; el._tipPasang = 1;
+    el.addEventListener('pointermove', e => { if (kunci || e.pointerType === 'touch') return; const h = e.target.closest?.('.hit'); h ? buka(h, e) : el.querySelector('.tip-grafik')?.classList.remove('on'); });
+    el.addEventListener('pointerleave', e => { if (!kunci && e.pointerType !== 'touch') { el.querySelector('.tip-grafik')?.classList.remove('on'); el.querySelectorAll('.hit.on').forEach(h => h.classList.remove('on')); } });
+    el.addEventListener('click', e => { const h = e.target.closest?.('.hit'); e.stopPropagation(); if (!h) return tutup(); if (kunci === h) return tutup(); kunci = h; buka(h, e); });
+    document.addEventListener('click', e => { if (!el.contains(e.target)) tutup(); });
+  },
+  bar(el, labels, seri, fmt = v => v.toLocaleString('id-ID')) {
     const W = 640, H = 260, L = 50, B = 28, T = 12, all = seri.flatMap(s => s.data), { top, t } = this.skala(all), n = labels.length, gw = (W - L - 8) / n, bw = Math.min(26, gw / (seri.length + .6));
     let g = this._sumbu(top, t, L, W, H, T, B) + this._label(labels, i => L + gw * i + gw / 2, H);
     labels.forEach((l, i) => seri.forEach((s, j) => { const v = s.data[i]; if (!v) return; const h = (H - T - B) * v / top, x = L + gw * i + gw / 2 - bw * seri.length / 2 + j * bw;
-      g += `<rect class="bar" x="${x}" y="${H - B - h}" width="${Math.max(bw - 2, 3)}" height="${h}" rx="3" fill="${s.warna}" style="animation-delay:${i * 25 + j * 40}ms"><title>${K.esc(l)} - ${K.esc(s.nama)}: ${v.toLocaleString('id-ID')}</title></rect>`; }));
-    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img">${g}${all.some(Boolean) ? '' : this._kosong(W, H)}</svg>`;
+      g += `<rect class="bar" x="${x}" y="${H - B - h}" width="${Math.max(bw - 2, 3)}" height="${h}" rx="3" fill="${s.warna}" style="animation-delay:${i * 25 + j * 40}ms"/>`; }));
+    labels.forEach((l, i) => { const top0 = Math.min(...seri.map(s => s.data[i] ? H - B - (H - T - B) * s.data[i] / top : H - B)); g += `<rect class="hit" x="${L + gw * i}" y="${T}" width="${gw}" height="${H - T - B}" fill="transparent" data-ax="${L + gw * i + gw / 2}" data-ay="${top0}" data-tip="${K.esc(l)}||${seri.map(s => (seri.length > 1 ? s.nama + ': ' : '') + fmt(s.data[i] || 0)).map(K.esc).join('||')}"/>`; });
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img">${g}${all.some(Boolean) ? '' : this._kosong(W, H)}</svg>`; this._pasang(el);
   },
-  area(el, labels, data, warna = '#38995e') {
+  area(el, labels, data, warna = '#38995e', fmt = v => v.toLocaleString('id-ID')) {
     const W = 640, H = 240, L = 50, B = 28, T = 14, { top, t } = this.skala(data), n = labels.length, sx = i => L + (W - L - 14) * (n === 1 ? .5 : i / (n - 1)), sy = v => T + (H - T - B) * (1 - v / top);
     const d = 'M' + data.map((v, i) => `${sx(i)},${sy(v)}`).join(' L'), g = this._sumbu(top, t, L, W, H, T, B) + this._label(labels, sx, H), pts = n <= 16;
     el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img"><defs><linearGradient id="ga${warna.slice(1)}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${warna}" stop-opacity=".35"/><stop offset="1" stop-color="${warna}" stop-opacity="0"/></linearGradient></defs>${g}
       <path class="area" d="${d} L${sx(n - 1)},${H - B} L${sx(0)},${H - B}Z" fill="url(#ga${warna.slice(1)})"/><path class="garis" pathLength="1" d="${d}" fill="none" stroke="${warna}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-      ${data.map((v, i) => (pts || v) ? `<circle class="titik" cx="${sx(i)}" cy="${sy(v)}" r="${pts ? 4 : 3}" fill="#fff" stroke="${warna}" stroke-width="2.5" style="animation-delay:${500 + i * 25}ms"><title>${K.esc(labels[i])}: ${v.toLocaleString('id-ID')}</title></circle>` : '').join('')}${data.some(Boolean) ? '' : this._kosong(W, H)}</svg>`;
+      ${data.map((v, i) => (pts || v) ? `<circle class="titik" cx="${sx(i)}" cy="${sy(v)}" r="${pts ? 4 : 3}" fill="#fff" stroke="${warna}" stroke-width="2.5" style="animation-delay:${500 + i * 25}ms"/>` : '').join('')}${data.map((v, i) => `<rect class="hit" x="${sx(i) - (W - L - 14) / Math.max(n - 1, 1) / 2}" y="${T}" width="${(W - L - 14) / Math.max(n - 1, 1)}" height="${H - T - B}" fill="transparent" data-ax="${sx(i)}" data-ay="${sy(v)}" data-tip="${K.esc(labels[i])}||${K.esc(fmt(v))}"/>`).join('')}${data.some(Boolean) ? '' : this._kosong(W, H)}</svg>`; this._pasang(el);
   },
-  donut(el, items) {
+  donut(el, items, satuan = '') {
     const tot = items.reduce((a, i) => a + i.nilai, 0) || 1; let off = 0;
-    const arc = items.map((i, k) => { const p = i.nilai / tot * 100, s = p ? `<circle class="arc" r="15.9" cx="21" cy="21" fill="none" stroke="${i.warna}" stroke-width="6" pathLength="100" stroke-dasharray="${Math.max(p - 1, 0)} ${100 - Math.max(p - 1, 0)}" stroke-dashoffset="${-off}" style="animation-delay:${k * 150}ms"/>` : ''; off += p; return s; }).join('');
-    el.innerHTML = `<div class="flex items-center gap-6 flex-wrap justify-center"><svg viewBox="0 0 42 42" class="w-40 h-40 -rotate-90">${arc}</svg><ul class="space-y-2 text-sm">${items.map(i => `<li class="flex items-center gap-2"><span class="w-3 h-3 rounded-full" style="background:${i.warna}"></span><span class="text-slate-600">${K.esc(i.label)}</span><b class="ml-auto pl-4">${i.nilai} <span class="text-slate-400 font-medium">(${Math.round(i.nilai / tot * 100)}%)</span></b></li>`).join('')}</ul></div>`;
+    const arc = items.map((i, k) => { const p = i.nilai / tot * 100, s = p ? `<circle class="arc hit" r="15.9" cx="21" cy="21" fill="none" stroke="${i.warna}" stroke-width="6" pathLength="100" stroke-dasharray="${Math.max(p - 1, 0)} ${100 - Math.max(p - 1, 0)}" stroke-dashoffset="${-off}" data-tip="${K.esc(i.label)}||${i.nilai}${satuan} (${Math.round(p)}%)" style="animation-delay:${k * 150}ms"/>` : ''; off += p; return s; }).join('');
+    el.innerHTML = `<div class="flex items-center gap-6 flex-wrap justify-center"><svg viewBox="0 0 42 42" class="w-40 h-40 -rotate-90">${arc}</svg><ul class="space-y-2 text-sm">${items.map(i => `<li class="flex items-center gap-2"><span class="w-3 h-3 rounded-full" style="background:${i.warna}"></span><span class="text-slate-600">${K.esc(i.label)}</span><b class="ml-auto pl-4">${i.nilai} <span class="text-slate-400 font-medium">(${Math.round(i.nilai / tot * 100)}%)</span></b></li>`).join('')}</ul></div>`; this._pasang(el);
   },
   // Awal periode berjalan & periode sebelumnya. hari = hari ini, minggu = Senin sampai hari ini, bulan = tanggal 1 bulan ini sampai hari ini
   _periode(r) {
@@ -300,39 +402,33 @@ const Dash = {
   },
   segarkanAvatar(user) { $$('.js-avatar').forEach(e => e.innerHTML = avatar(user, 'w-full h-full')); $$('.js-user').forEach(e => e.textContent = user.username); },
 };
-// Pola QR (simulasi visual QRIS; bukan QR sungguhan)
-const QR = seed => { let s = seed * 9301 + 49297, r = () => (s = (s * 9301 + 49297) % 233280) / 233280, n = 25, c = '', f = (x, y) => (x < 8 && y < 8) || (x > 16 && y < 8) || (x < 8 && y > 16);
-  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (!f(x, y) && r() > .5) c += `<rect x="${x}" y="${y}" width="1" height="1"/>`;
-  const fp = (x, y) => `<rect x="${x}" y="${y}" width="7" height="7" fill="none" stroke="#111" stroke-width="1"/><rect x="${x + 2}" y="${y + 2}" width="3" height="3"/>`;
-  return `<svg viewBox="-1 -1 27 27" class="w-full h-full" fill="#111" shape-rendering="crispEdges">${c}${fp(.5, .5)}${fp(17.5, .5)}${fp(.5, 17.5)}</svg>`; };
 
-/* ---------- Lacak paket (dipakai dashboard customer & admin): cari nomor pesanan atau resi -> linimasa status ---------- */
+/* ---------- Lacak paket (dipakai dashboard customer & admin): cari nomor pesanan atau resi -> linimasa status ----------
+   Markup ada di <template id="t-lacak"> dan <template id="t-lacak-form"> pada halaman yang memakainya. */
 const Lacak = {
-  html(d) {
+  node(d) {
     const p = d.pesanan, tl = d.timeline, aktif = tl.findLastIndex(x => x.selesai), batal = p.status === 'dibatalkan';
-    const w = t => t ? new Date(t).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : 'Menunggu';
-    return `<div class="panel space-y-4"><div class="flex flex-wrap justify-between gap-2 items-start"><div><b class="text-lg">Pesanan #${p.id}</b><p class="text-sm text-slate-500">${p.resi ? `${K.esc(p.kurir)} &middot; Resi <b class="text-slate-800 select-all">${K.esc(p.resi)}</b>` : 'Nomor resi belum tersedia (menunggu dikirim)'}</p></div>${badgeStatus(p.status)}</div>
-      <ol class="relative ml-3 border-l-2 ${batal ? 'border-rose-200' : 'border-brand-100'} space-y-5 py-1">${tl.map((x, i) => `<li class="pl-6 relative"><span class="absolute -left-[13px] top-0 w-6 h-6 rounded-full grid place-items-center text-[11px] font-bold ${x.selesai ? (batal && i === tl.length - 1 ? 'bg-rose-500 text-white' : 'bg-brand-600 text-white') : 'bg-slate-200 text-slate-400'} ${i === aktif && !batal && p.status !== 'selesai' ? 'ring-4 ring-brand-100' : ''}">${x.selesai ? (batal && i === tl.length - 1 ? '✕' : '✓') : i + 1}</span>
-        <p class="font-semibold text-sm ${x.selesai ? '' : 'text-slate-400'}">${K.esc(x.label)}</p><p class="text-xs text-slate-500">${x.selesai ? (x.waktu ? w(x.waktu) : '') : 'Menunggu'}</p></li>`).join('')}</ol>
-      <div class="text-sm text-slate-600 border-t border-slate-100 pt-3">${p.items.map(x => `${K.esc(x.nama)} x${x.qty}`).join(', ')}${p.pengiriman ? `<p class="mt-1 text-xs text-slate-500">Dikirim ke <b>${K.esc(p.pengiriman.penerima)}</b>, ${K.esc(p.pengiriman.alamat)}, ${K.esc(p.pengiriman.kota)} ${K.esc(p.pengiriman.kodePos)}</p>` : ''}</div></div>`;
+    return T.satu('t-lacak', { ...p, namaStatus: namaStatus(p), kelasStatus: STATUS[p.status][2], batal, adaResi: !!p.resi, tanpaResi: !p.resi,
+      ringkas: p.items.map(x => `${x.nama} x${x.qty}`).join(', '), tujuan: p.pengiriman ? `Dikirim ke ${p.pengiriman.penerima}, ${p.pengiriman.alamat}, ${p.pengiriman.kota} ${p.pengiriman.kodePos}` : '',
+      timeline: tl.map((x, i) => ({ ...x, no: x.selesai ? (batal && i === tl.length - 1 ? '✕' : '✓') : String(i + 1), waktuTeks: x.selesai ? (x.waktu ? wkt(x.waktu) : '') : 'Menunggu',
+        ok: x.selesai, belum: !x.selesai, gagal: x.selesai && batal && i === tl.length - 1, berjalan: i === aktif && !batal && p.status !== 'selesai' })) });
   },
   pasang(root, awal) {
-    root.innerHTML = `<form class="panel flex flex-col sm:flex-row gap-3 max-w-2xl" novalidate><input class="in flex-1" maxlength="40" placeholder="Nomor pesanan (mis. 12) atau nomor resi" aria-label="Nomor pesanan atau resi" autocomplete="off"><button class="btn btn-p">Lacak Paket</button></form><p class="text-sm text-rose-600 min-h-5 mt-2" role="alert"></p><div class="hasil max-w-2xl mt-2"></div>`;
+    root.replaceChildren(T.klon('t-lacak-form'));
     const f = $('form', root), inp = $('input', f), err = $('[role=alert]', root), out = $('.hasil', root);
-    const cari = async kode => { err.textContent = ''; out.innerHTML = ''; if (!kode.trim()) { err.textContent = 'Isi nomor pesanan atau nomor resi.'; return; }
-      try { out.innerHTML = Lacak.html(await Api.lacak(kode.trim())); } catch (x) { err.textContent = x.message; } };
+    const cari = async kode => { err.textContent = ''; out.replaceChildren(); if (!kode.trim()) { err.textContent = 'Isi nomor pesanan atau nomor resi.'; return; }
+      try { out.append(Lacak.node(await Api.lacak(kode.trim()))); } catch (x) { err.textContent = x.message; } };
     f.onsubmit = e => { e.preventDefault(); cari(inp.value); };
     if (awal) { inp.value = awal; cari(awal); }
   },
 };
 
-/* Percakapan di bawah ulasan: balasan pertama admin + balasan lanjutan (admin <-> pemilik ulasan) */
+/* Percakapan di bawah ulasan: balasan pertama admin + balasan lanjutan (admin <-> pemilik ulasan). Memakai <template id="t-balasan"> */
 const Balasan = {
   pesan: u => [...(u.balasan ? [{ dari: 'admin', teks: u.balasan.teks, dibuat: u.balasan.dibuat }] : []), ...(u.lanjutan || [])],
   perluAdmin: u => { const p = Balasan.pesan(u); return !p.length || p[p.length - 1].dari === 'customer'; },
-  html(u, namaPemilik) {
-    return Balasan.pesan(u).map(x => x.dari === 'admin'
-      ? `<div class="mt-3 rounded-xl bg-brand-50 border-l-4 border-brand-500 px-3 py-2 text-sm"><b class="text-brand-700 text-xs">Admin &middot; ${tgl(x.dibuat)}</b><p class="text-slate-600 mt-0.5">${K.esc(x.teks)}</p></div>`
-      : `<div class="mt-3 ml-6 rounded-xl bg-slate-50 border-l-4 border-sun-400 px-3 py-2 text-sm"><b class="text-slate-600 text-xs">${K.esc(namaPemilik)} &middot; ${tgl(x.dibuat)}</b><p class="text-slate-600 mt-0.5">${K.esc(x.teks)}</p></div>`).join('');
-  },
+  nodes(u, namaPemilik) { return Balasan.pesan(u).map(x => T.satu('t-balasan', { ...x, nama: x.dari === 'admin' ? 'Admin' : namaPemilik, admin: x.dari === 'admin', pelanggan: x.dari !== 'admin' })); },
 };
+
+// Penyiapan awal tiap halaman: ikon dari atribut data-ikon
+document.addEventListener('DOMContentLoaded', () => ikon());
