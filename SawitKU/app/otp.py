@@ -1,8 +1,10 @@
 """OTP email: pembuatan kode, hash, dan pengiriman lewat SMTP (pendaftaran dan penggantian email)."""
-import hashlib, hmac, secrets, smtplib, ssl
+import hashlib, hmac, logging, secrets, smtplib, ssl
 from email.message import EmailMessage
-from flask import current_app
+from .config import cfg
 from .errors import ApiError
+
+log = logging.getLogger('sawitku')
 
 
 def buat_kode():
@@ -20,12 +22,12 @@ def cocok(a, b):
 def _kirim(m, catatan_dev):
     """Kirim lewat SMTP. Tanpa SMTP_HOST: hanya boleh di mode pengembangan (OTP_CETAK_KODE=1 atau --debug), selain itu
     DITOLAK agar produksi tidak diam-diam gagal dan kode tidak bocor ke log."""
-    c = current_app.config
+    c = cfg
     if not c['SMTP_HOST']:
-        if c['OTP_CETAK_KODE'] or current_app.debug:
-            current_app.logger.warning('[MODE PENGEMBANGAN: email TIDAK dikirim] %s', catatan_dev)
+        if c['OTP_CETAK_KODE'] or c['DEBUG']:
+            log.warning('[MODE PENGEMBANGAN: email TIDAK dikirim] %s', catatan_dev)
             return
-        current_app.logger.error('SMTP_HOST belum diisi: email tidak dapat dikirim.')
+        log.error('SMTP_HOST belum diisi: email tidak dapat dikirim.')
         raise ApiError('Layanan email belum dikonfigurasi. Hubungi admin.', 503)
     m['From'] = c['SMTP_FROM'] or c['SMTP_USER']
     try:
@@ -40,7 +42,7 @@ def _kirim(m, catatan_dev):
                 s.login(c['SMTP_USER'], c['SMTP_PASSWORD'])
             s.send_message(m)
     except (smtplib.SMTPException, OSError):
-        current_app.logger.exception('Gagal mengirim email ke %s', m['To'])
+        log.exception('Gagal mengirim email ke %s', m['To'])
         raise ApiError('Gagal mengirim email kode OTP. Periksa alamat email atau coba lagi nanti.', 502)
 
 
@@ -52,7 +54,7 @@ def kirim_kode(email, username, kode, perihal='pendaftaran'):
     m.set_content(
         f"Halo {username},\n\n"
         f"Kode verifikasi {perihal} SawitKu kamu:\n\n    {kode}\n\n"
-        f"Kode berlaku {current_app.config['OTP_MENIT']} menit. Jangan bagikan kode ini kepada siapa pun, termasuk pihak yang mengaku dari SawitKu.\n\n"
+        f"Kode berlaku {cfg['OTP_MENIT']} menit. Jangan bagikan kode ini kepada siapa pun, termasuk pihak yang mengaku dari SawitKu.\n\n"
         f"Jika kamu tidak merasa memintanya, abaikan email ini.\n\nSawitKu")
     _kirim(m, f'{email} -> kode {kode} ({perihal})')
 
@@ -64,7 +66,7 @@ def kirim_reset(email, username, kode):
     m['To'] = email
     m.set_content(
         f"Halo {username},\n\nKami menerima permintaan mengatur ulang password akun SawitKu kamu. Kode verifikasinya:\n\n    {kode}\n\n"
-        f"Kode berlaku {current_app.config['OTP_MENIT']} menit. Jangan bagikan kode ini kepada siapa pun.\n\n"
+        f"Kode berlaku {cfg['OTP_MENIT']} menit. Jangan bagikan kode ini kepada siapa pun.\n\n"
         f"Jika bukan kamu yang memintanya, abaikan email ini; password kamu tidak berubah.\n\nSawitKu")
     _kirim(m, f'{email} -> kode {kode} (reset password)')
 
