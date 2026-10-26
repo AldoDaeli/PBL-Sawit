@@ -1,14 +1,18 @@
 """Chat pelanggan <-> admin. Satu percakapan per pelanggan; pelanggan hanya bisa mengakses percakapannya sendiri
 (id pemilik SELALU diambil dari sesi, tidak pernah dari input), admin bisa membaca dan membalas semua percakapan pelanggan."""
-from flask import g, current_app, request
-from . import bp, body, ok
+from flask import request
+
+from . import api, ok
+from ..config import cfg
 from ..db import get_db
 from ..errors import ApiError
+from ..schemas import badan, ChatIn
 from ..security import now_ms, wajib, batasi_laju
 from ..serializers import chat_out
 from ..validators import bersihkan_chat
 
 HALAMAN = 50
+pelanggan, admin_saja = wajib('customer'), wajib('admin')
 
 
 def _id_param(args, nama):
@@ -39,31 +43,32 @@ def _simpan(db, uid, dari, isi, admin_id=None):
 
 
 # ---------------- Pelanggan ----------------
-@bp.get('/chat')
-@wajib('customer')
-def chat_saya():
-    return ok(_ambil(get_db(), g.user['id'], request.args, 'admin'))
+@api.get('/chat', tags=['Chat'])
+@pelanggan
+def chat_saya(u):
+    return ok(_ambil(get_db(), u['id'], request.args, 'admin'))
 
 
-@bp.get('/chat/belum')
-@wajib('customer')
-def chat_belum_saya():
-    r = get_db().one("SELECT COUNT(*) AS n FROM chat_pesan WHERE user_id=%s AND dari='admin' AND dibaca=0", (g.user['id'],))
+@api.get('/chat/belum', tags=['Chat'])
+@pelanggan
+def chat_belum_saya(u):
+    r = get_db().one("SELECT COUNT(*) AS n FROM chat_pesan WHERE user_id=%s AND dari='admin' AND dibaca=0", (u['id'],))
     return ok({'belum': r['n']})
 
 
-@bp.post('/chat')
-@wajib('customer')
-def chat_kirim():
-    c, db, uid = current_app.config, get_db(), g.user['id']
+@api.post('/chat', status_code=201, tags=['Chat'])
+@pelanggan
+def chat_kirim(u):
+    b = badan(ChatIn)
+    c, db, uid = cfg, get_db(), u['id']
     batasi_laju('chat', c['LAJU_CHAT'], 60, siapa=f'u{uid}')                  # per akun
     batasi_laju('chat-ip', c['LAJU_CHAT'] * 3, 60)                           # per IP (banyak akun dari satu tempat)
-    isi = bersihkan_chat(body().get('isi'))
+    isi = bersihkan_chat(b.isi)
     r = db.one("SELECT COUNT(*) AS n FROM chat_pesan WHERE user_id=%s AND dari='customer' AND id > "
                "COALESCE((SELECT MAX(id) FROM chat_pesan WHERE user_id=%s AND dari='admin'), 0)", (uid, uid))
     if r['n'] >= c['CHAT_MAKS_BERUNTUN']:
         raise ApiError('Admin belum membalas. Tunggu balasan sebelum mengirim pesan lagi.', 429)
-    return ok(_simpan(db, uid, 'customer', isi), 201)
+    return ok(_simpan(db, uid, 'customer', isi))
 
 
 # ---------------- Admin ----------------
@@ -73,9 +78,9 @@ def _pelanggan(db, uid):
     return u
 
 
-@bp.get('/admin/chat')
-@wajib('admin')
-def admin_chat_daftar():
+@api.get('/admin/chat', tags=['Chat'])
+@admin_saja
+def admin_chat_daftar(_):
     rows = get_db().all(
         "SELECT u.id AS user_id, u.username, u.aktif, m.dari, m.isi, m.dibuat, "
         "(SELECT COUNT(*) FROM chat_pesan x WHERE x.user_id=u.id AND x.dari='customer' AND x.dibaca=0) AS belum "
@@ -85,29 +90,30 @@ def admin_chat_daftar():
                 'terakhir': r['isi'][:80], 'dibuat': r['dibuat'], 'belum': r['belum']} for r in rows])
 
 
-@bp.get('/admin/chat/belum')
-@wajib('admin')
-def admin_chat_belum():
+@api.get('/admin/chat/belum', tags=['Chat'])
+@admin_saja
+def admin_chat_belum(_):
     r = get_db().one("SELECT COUNT(*) AS n FROM chat_pesan WHERE dari='customer' AND dibaca=0")
     return ok({'belum': r['n']})
 
 
-@bp.get('/admin/chat/<int:uid>')
-@wajib('admin')
-def admin_chat_baca(uid):
+@api.get('/admin/chat/<int:uid>', tags=['Chat'])
+@admin_saja
+def admin_chat_baca(_, uid):
     db = get_db(); u = _pelanggan(db, uid)
     d = _ambil(db, uid, request.args, 'customer')
     if not request.args.get('sejak'): d['pelanggan'] = {'id': u['id'], 'username': u['username'], 'email': u['email'], 'aktif': bool(u['aktif'])}
     return ok(d)
 
 
-@bp.post('/admin/chat/<int:uid>')
-@wajib('admin')
-def admin_chat_balas(uid):
-    c, db = current_app.config, get_db()
-    batasi_laju('chat-admin', 60, 60, siapa=f"a{g.user['id']}")
+@api.post('/admin/chat/<int:uid>', status_code=201, tags=['Chat'])
+@admin_saja
+def admin_chat_balas(adm, uid):
+    b = badan(ChatIn)
+    db = get_db()
+    batasi_laju('chat-admin', 60, 60, siapa=f"a{adm['id']}")
     u = _pelanggan(db, uid)
     if not db.one('SELECT id FROM chat_pesan WHERE user_id=%s LIMIT 1', (uid,)):
         raise ApiError('Percakapan belum dimulai oleh pelanggan.', 404)       # admin hanya membalas, tidak memulai chat
     if not u['aktif']: raise ApiError('Akun pelanggan dinonaktifkan.', 409)
-    return ok(_simpan(db, uid, 'admin', bersihkan_chat(body().get('isi')), g.user['id']), 201)
+    return ok(_simpan(db, uid, 'admin', bersihkan_chat(b.isi), adm['id']))
