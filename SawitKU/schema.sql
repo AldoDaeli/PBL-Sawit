@@ -1,5 +1,5 @@
 -- Skema MariaDB 10.5+ untuk SawitKu. Waktu disimpan sebagai epoch milidetik (BIGINT),
--- sama dengan format yang dipakai frontend. Jalankan: flask --app wsgi init-db
+-- sama dengan format yang dipakai frontend. Jalankan: python manage.py init-db
 
 CREATE TABLE IF NOT EXISTS pengguna (
   id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS produk (
   harga INT NOT NULL CHECK (harga >= 0),
   stok INT NOT NULL DEFAULT 0 CHECK (stok >= 0),
   terjual INT NOT NULL DEFAULT 0,
-  rating DECIMAL(2,1) NOT NULL DEFAULT 4.5,
+  rating DECIMAL(2,1) NOT NULL DEFAULT 0,      -- rata-rata ulasan 1-5, 0 = belum ada ulasan
   best_seller TINYINT NOT NULL DEFAULT 0,
   gambar VARCHAR(500) NOT NULL,
   deskripsi VARCHAR(400) NOT NULL DEFAULT '',
@@ -77,9 +77,16 @@ CREATE TABLE IF NOT EXISTS pesanan (
   t_proses BIGINT NULL,
   t_kirim BIGINT NULL,
   t_selesai BIGINT NULL,
-  -- Midtrans (virtual account): order_id unik per percobaan bayar; metode = 'qris' (manual) | 'midtrans'
+  -- Pembayaran Midtrans (Core API): metode = pilihan pembeli (qris|bca|bni|bri|permata|mandiri); midtrans_id = order_id unik per tagihan;
+  -- midtrans_data = JSON tampilan (URL QR / nomor VA); midtrans_status = status terakhir dari Midtrans (hanya bahan verifikasi admin)
   metode VARCHAR(12) NULL,
   midtrans_id VARCHAR(50) NULL,
+  midtrans_status VARCHAR(20) NULL,
+  midtrans_data TEXT NULL,
+  -- Konfirmasi terima: admin menandai tiba (t_sampai); pembeli konfirmasi + foto opsional, atau otomatis selesai setelah AUTO_TERIMA_JAM
+  t_sampai BIGINT NULL,
+  foto_terima VARCHAR(255) NULL,
+  otomatis TINYINT NOT NULL DEFAULT 0,
   FOREIGN KEY (user_id) REFERENCES pengguna (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE INDEX IF NOT EXISTS idx_pesanan_user ON pesanan (user_id, dibuat);
