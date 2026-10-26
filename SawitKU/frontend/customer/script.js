@@ -1,12 +1,29 @@
 'use strict';
-let user, filterPesanan = 'semua', rentang = 'semua', fotoBaru = null;
-const aktif = o => o.status !== 'dibatalkan';
-const kelompok = { semua: 'Semua', proses: 'Dalam Proses', selesai: 'Selesai', batal: 'Dibatalkan' };
-const tab = (map, cur, aksi) => Object.entries(map).map(([k, v]) => `<button class="tab ${k === cur ? 'aktif' : ''}" data-aksi="${aksi}" data-v="${k}">${v}</button>`).join('');
-const kosong = (t, l, h) => `<div class="panel text-center py-14"><p class="text-slate-500">${t}</p>${l ? `<a href="${h}" class="btn btn-p mt-4">${l}</a>` : ''}</div>`;
-const statCard = (kls, judul, nilai, ket, i = 0) => `<div class="kartu-stat ${kls}" style="animation-delay:${i * 90}ms"><p class="text-sm font-semibold opacity-90 relative">${judul}</p><p class="text-3xl font-extrabold mt-3 relative" data-hitung="${nilai}">0</p><p class="text-sm mt-4 opacity-90 relative">${ket}</p></div>`;
+/* Dashboard customer. Markup ada di <template> pada index.html; berkas ini hanya mengambil data dan mengisinya (lihat T di core.js). */
+let user, filterPesanan = 'semua', rentang = 'semua', fotoBaru = null, METODE = null;
+const kelompok = { semua: 'Semua', proses: 'Dalam proses', selesai: 'Selesai', batal: 'Dibatalkan' };
+const IKON_METODE = { qris: 'qr', bca: 'bank', bni: 'bank', bri: 'bank', permata: 'bank', mandiri: 'bank' };
+const BAYAR = ['diproses', 'dikirim', 'selesai'];
+const LUNAS = o => BAYAR.includes(o.status) && !!o.midtrans && ['settlement', 'capture'].includes(o.midtrans.status);   // angka belanja hanya dari pembayaran asli                       // status yang dihitung sebagai belanja
+const metode = async () => METODE || (METODE = await Api.metodeBayar());
+const labelMetode = async kode => ((await metode()).find(m => m.kode === kode) || {}).label || 'Midtrans';
+
+const tabs = (map, cur, aksi) => Object.entries(map).map(([kode, nama]) => T.satu('t-tab', { kode, nama, aksi, aktif: kode === cur }));
+const kosong = (teks, tombol, href) => T.satu('t-kosong', { teks, tombol, href });
+const stat = (warna, judul, nilai, ket, rp = false) => T.satu('t-stat', { warna, judul, nilai, ket, rp: rp ? '1' : '' });
 function hitungAngka(root) { $$('[data-hitung]', root).forEach(e => Animasi.hitung(e, +e.dataset.hitung, e.dataset.rp ? rp : undefined)); }
 async function badgeNav() { const c = await Api.jumlahKeranjang(), a = $('.nav-item[data-sec="keranjang"]'); let p = $('.pin', a); if (!c) return p && p.remove(); if (!p) { p = document.createElement('span'); p.className = 'pin'; a.append(p); } p.textContent = c; }
+
+// Data turunan satu pesanan untuk template t-pesanan
+function dataPesanan(o, sudah, daftarMetode) {
+  const m = daftarMetode.find(x => x.kode === o.metode);
+  return { ...o, namaStatus: namaStatus(o), kelasStatus: STATUS[o.status][2], labelMetode: m ? m.label : 'Midtrans',
+    items: o.items.map(x => ({ ...x, bisaUlas: o.status === 'selesai' && x.produkId != null && !sudah.has(x.produkId) })),
+    infoBatal: o.status === 'dibatalkan' && !!o.alasan, infoTolak: o.status === 'menunggu_bayar' && !!o.ditolak,
+    menungguBayar: o.status === 'menunggu_bayar', labelBayar: o.ditolak ? 'Unggah ulang bukti' : 'Bayar sekarang', menungguVerifikasi: o.status === 'menunggu_verifikasi',
+    infoTiba: o.status === 'dikirim' && !!o.batasTerima, bisaTerima: o.status === 'dikirim', bisaLacak: BAYAR.includes(o.status),
+    fotoTerima: o.fotoTerima || '', otomatis: o.status === 'selesai' && o.otomatis };
+}
 
 let chatC = null, lencanaC = null, lacakAwal = '';
 const R = {
@@ -16,118 +33,91 @@ const R = {
     chatC = Chat.pasang($('#chat-root'), { saya: 'customer', muat: p => Api.chat(p), kirim: isi => Api.chatKirim(isi), diMuat: () => lencanaC && lencanaC.segarkan() });
   },
   async ringkasan() {
-    const [os, jmlKer] = await Promise.all([Api.pesananSaya(), Api.jumlahKeranjang()]), belanja = os.filter(o => ['diproses', 'dikirim', 'selesai'].includes(o.status)).reduce((a, o) => a + o.total, 0), akt = os.filter(o => STATUS[o.status][1] === 'proses').length;
-    $('#r-stat').innerHTML = statCard('g1', 'Total Belanja', belanja, `${os.filter(o => o.status === 'selesai').length} pesanan selesai`, 0).replace('data-hitung', 'data-rp="1" data-hitung') + statCard('g2', 'Pesanan Berjalan', akt, 'Menunggu bayar atau dikirim', 1) + statCard('g3', 'Item di Keranjang', jmlKer, 'Siap untuk checkout', 2);
-    hitungAngka($('#r-stat'));
-    const s = Grafik.seri(os.filter(o => ['diproses', 'dikirim', 'selesai'].includes(o.status)).map(o => ({ t: o.dibuat, v: o.total })), 'minggu', i => i.v); Grafik.bar($('#r-grafik'), s.labels, [{ nama: 'Belanja', warna: '#38995e', data: s.data }]);
+    const [os, jmlKer] = await Promise.all([Api.pesananSaya(), Api.jumlahKeranjang()]), belanja = os.filter(LUNAS).reduce((a, o) => a + o.total, 0), akt = os.filter(o => STATUS[o.status][1] === 'proses').length;
+    const st = $('#r-stat'); st.replaceChildren(stat('g1', 'Total belanja', belanja, `${os.filter(o => o.status === 'selesai').length} pesanan selesai`, true), stat('g2', 'Pesanan berjalan', akt, 'Menunggu bayar atau dikirim'), stat('g3', 'Item di keranjang', jmlKer, 'Siap untuk checkout')); hitungAngka(st);
+    const s = Grafik.seri(os.filter(LUNAS).map(o => ({ t: o.dibuat, v: o.total })), 'minggu', i => i.v); Grafik.bar($('#r-grafik'), s.labels, [{ nama: 'Belanja', warna: '#38995e', data: s.data }], rp);
     const g = { selesai: 0, proses: 0, batal: 0 }; os.forEach(o => g[STATUS[o.status][1]]++);
-    Grafik.donut($('#r-donut'), [{ label: 'Selesai', nilai: g.selesai, warna: '#38995e' }, { label: 'Dalam Proses', nilai: g.proses, warna: '#f7c948' }, { label: 'Dibatalkan', nilai: g.batal, warna: '#fb7185' }]);
-    $('#r-terbaru').innerHTML = os.slice(0, 4).map((o, i) => `<div class="baris py-3 flex items-center gap-3" style="animation-delay:${i * 60}ms"><img class="w-12 h-12 rounded-xl object-cover" src="${K.url(o.items[0].gambar)}" alt=""><div class="min-w-0 flex-1"><p class="font-semibold text-sm truncate">${K.esc(o.items[0].nama)}${o.items.length > 1 ? ` +${o.items.length - 1} lainnya` : ''}</p><p class="text-xs text-slate-500">#${o.id} &middot; ${tgl(o.dibuat)}</p></div><div class="text-right"><b class="text-sm">${rp(o.total)}</b><div class="mt-1">${badgeStatus(o.status)}</div></div></div>`).join('') || '<p class="text-slate-500 py-4">Belum ada pesanan.</p>';
+    Grafik.donut($('#r-donut'), [{ label: 'Selesai', nilai: g.selesai, warna: '#38995e' }, { label: 'Dalam proses', nilai: g.proses, warna: '#f7c948' }, { label: 'Dibatalkan', nilai: g.batal, warna: '#fb7185' }], ' pesanan');
+    const t = $('#r-terbaru'); if (os.length) T.daftar(t, 't-terbaru', os.slice(0, 4).map(o => ({ ...o, gambar: o.items[0].gambar, judul: o.items[0].nama + (o.items.length > 1 ? ` +${o.items.length - 1} lainnya` : ''), namaStatus: namaStatus(o), kelasStatus: STATUS[o.status][2] }))); else t.replaceChildren(kosong('Belum ada pesanan.', 'Mulai belanja', '/#katalog'));
   },
   async keranjang() {
     const k = await Api.keranjang(), el = $('#k-isi'); badgeNav();
-    if (!k.length) return el.innerHTML = kosong('Keranjangmu masih kosong.', 'Mulai Belanja', '/#katalog');
-    const total = k.reduce((a, c) => a + c.p.harga * c.qty, 0);
-    el.innerHTML = `<div class="grid lg:grid-cols-3 gap-6"><div class="lg:col-span-2 space-y-3">${k.map((c, i) => `<div class="panel baris flex gap-4 items-center !p-4" style="animation-delay:${i * 60}ms"><img class="w-20 h-20 rounded-xl object-cover" src="${K.url(c.p.gambar)}" alt="${K.esc(c.p.nama)}"><div class="flex-1 min-w-0"><a class="font-bold hover:text-brand-600 block truncate" href="/produk/${c.p.id}">${K.esc(c.p.nama)}</a><p class="text-brand-700 font-bold text-sm">${rp(c.p.harga)}</p><p class="text-xs text-slate-500">Stok ${c.p.stok}</p></div>
-      <div class="flex items-center rounded-xl border border-slate-200"><button class="w-8 h-9" data-aksi="qty" data-id="${c.p.id}" data-d="-1" aria-label="Kurangi">&minus;</button><b class="w-8 text-center text-sm">${c.qty}</b><button class="w-8 h-9" data-aksi="qty" data-id="${c.p.id}" data-d="1" aria-label="Tambah">+</button></div>
-      <button class="btn btn-d !w-10 !px-0" data-aksi="hapus" data-id="${c.p.id}" aria-label="Hapus">${I('trash', 'w-4 h-4')}</button></div>`).join('')}</div>
-      <div class="panel h-fit space-y-3 lg:sticky lg:top-24"><h2 class="font-extrabold">Ringkasan</h2><div class="flex justify-between text-sm"><span class="text-slate-500">${k.reduce((a, c) => a + c.qty, 0)} item</span><b>${rp(total)}</b></div><div class="border-t pt-3 flex justify-between font-extrabold"><span>Total</span><span class="text-brand-700">${rp(total)}</span></div><button class="btn btn-p w-full !h-12" data-aksi="checkout">Checkout</button></div></div>`;
+    if (!k.length) return el.replaceChildren(kosong('Keranjangmu masih kosong.', 'Mulai belanja', '/#katalog'));
+    const total = k.reduce((a, c) => a + c.p.harga * c.qty, 0), v = T.satu('t-keranjang', { jumlah: k.reduce((a, c) => a + c.qty, 0), total });
+    T.daftar($('#k-daftar', v), 't-ker-item', k); el.replaceChildren(v);
   },
   async pesanan() {
-    $('#p-tab').innerHTML = tab(kelompok, filterPesanan, 'tabPesanan');
-    let semua = await Api.pesananSaya();
-    // pembeli baru kembali dari halaman Midtrans: sinkronkan status (webhook tetap jalur utama)
-    const vaMenunggu = semua.filter(o => o.metode === 'midtrans' && o.status === 'menunggu_bayar');
-    if (vaMenunggu.length) { const hs = await Promise.all(vaMenunggu.map(o => Api.midtransCek(o.id).catch(() => ({})))); if (hs.some(h => h.lunas)) { semua = await Api.pesananSaya(); Toast.ok('Pembayaran Virtual Account diterima.'); } }
-    const os = semua.filter(o => filterPesanan === 'semua' || STATUS[o.status][1] === filterPesanan);
+    $('#p-tab').replaceChildren(...tabs(kelompok, filterPesanan, 'tabPesanan'));
+    const [semua, dm] = await Promise.all([Api.pesananSaya(), metode()]), os = semua.filter(o => filterPesanan === 'semua' || STATUS[o.status][1] === filterPesanan);
     // produk yang sudah diulas (satu permintaan per produk unik dari pesanan selesai)
     const sudah = new Set(), calon = [...new Set(os.filter(o => o.status === 'selesai').flatMap(o => o.items.map(x => x.produkId)).filter(x => x != null))];
     await Promise.all(calon.map(async pid => { if (await Api.sudahUlas(pid)) sudah.add(pid); }));
-    $('#p-isi').innerHTML = os.map((o, i) => {
-      const bisaUlas = o.status === 'selesai' ? o.items.filter(x => x.produkId != null && !sudah.has(x.produkId)) : [];
-      return `<article class="panel baris" style="animation-delay:${i * 50}ms"><div class="flex flex-wrap justify-between gap-2 items-center"><div><b>Pesanan #${o.id}</b> <span class="text-xs text-slate-500 ml-2">${tgl(o.dibuat)}</span></div>${badgeStatus(o.status)}</div>
-      <div class="mt-3 divide-y divide-slate-100">${o.items.map(x => `<div class="py-2 flex items-center gap-3"><img class="w-12 h-12 rounded-lg object-cover" src="${K.url(x.gambar)}" alt=""><div class="flex-1 min-w-0 text-sm"><p class="font-semibold truncate">${K.esc(x.nama)}</p><p class="text-slate-500">${x.qty} x ${rp(x.harga)}</p></div>${bisaUlas.includes(x) ? `<button class="btn btn-o !h-8 !text-xs" data-aksi="ulas" data-id="${o.id}" data-p="${x.produkId}">Beri Ulasan</button>` : ''}</div>`).join('')}</div>
-      ${tujuanHtml(o)}
-      ${o.alasan && o.status === 'dibatalkan' ? `<p class="mt-2 text-sm rounded-xl bg-rose-50 text-rose-700 px-3 py-2">Alasan: ${K.esc(o.alasan)}</p>` : ''}
-      ${o.status === 'menunggu_bayar' && o.ditolak ? `<div class="mt-2 text-sm rounded-xl bg-rose-50 text-rose-700 px-3 py-2" role="alert"><b>Pembayaran ditolak.</b> ${o.alasan ? 'Alasan: ' + K.esc(o.alasan) + '. ' : ''}Silakan upload ulang bukti bayar.</div>` : ''}
-      ${o.status === 'menunggu_bayar' ? `<p class="mt-2 text-xs text-amber-700">Bayar sebelum ${new Date(o.batasBayar).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}, jika lewat pesanan otomatis dibatalkan.</p>` : ''}
-      ${o.status === 'menunggu_verifikasi' ? `<p class="mt-2 text-xs text-sky-700">Bukti bayar sudah terkirim dan sedang diperiksa admin.</p>` : ''}
-      ${o.resi ? `<p class="mt-2 text-sm rounded-xl bg-violet-50 text-violet-700 px-3 py-2">${K.esc(o.kurir)} &middot; Resi <b class="select-all">${K.esc(o.resi)}</b></p>` : ''}
-      <div class="mt-3 flex flex-wrap items-center justify-between gap-2"><b class="text-brand-700">${rp(o.total)}</b><div class="flex flex-wrap gap-2">
-        ${['diproses', 'dikirim', 'selesai'].includes(o.status) ? `<button class="btn btn-o" data-aksi="lacak" data-id="${o.id}">Lacak Paket</button>` : ''}
-        ${o.status === 'menunggu_bayar' ? `<button class="btn btn-d" data-aksi="batal" data-id="${o.id}">Batalkan</button><button class="btn btn-o" data-aksi="va" data-id="${o.id}">Virtual Account</button><button class="btn btn-p" data-aksi="bayar" data-id="${o.id}">${o.ditolak ? 'Upload Ulang Bukti' : 'Bayar via QRIS'}</button>` : ''}
-        ${o.status === 'dikirim' ? `<button class="btn btn-p" data-aksi="terima" data-id="${o.id}">Barang Diterima</button>` : ''}</div></div></article>`;
-    }).join('') || kosong('Tidak ada pesanan di kategori ini.');
+    const isi = $('#p-isi'); if (!os.length) return isi.replaceChildren(kosong('Tidak ada pesanan di kategori ini.'));
+    isi.replaceChildren(...os.map((o, i) => { const e = T.satu('t-pesanan', dataPesanan(o, sudah, dm)); e.dataset.id = o.id; e.style.animationDelay = Math.min(i, 8) * 50 + 'ms'; return e; }));
   },
   async favorit() {
-    const [ids, ps] = await Promise.all([Api.favorit(), Api.produk()]), f = ps.filter(p => ids.includes(p.id));
-    $('#f-isi').innerHTML = f.map((p, i) => `<article class="panel baris !p-0 overflow-hidden" style="animation-delay:${i * 60}ms"><a href="/produk/${p.id}"><img class="aspect-square object-cover w-full" src="${K.url(p.gambar)}" alt="${K.esc(p.nama)}"></a><div class="p-4"><p class="font-bold text-sm line-clamp-1">${K.esc(p.nama)}</p><b class="text-brand-700 text-sm">${rp(p.harga)}</b><div class="flex gap-2 mt-3"><button class="btn btn-p flex-1 !h-9" data-aksi="favCart" data-id="${p.id}">Keranjang</button><button class="btn btn-d !h-9 !px-3" data-aksi="favHapus" data-id="${p.id}" aria-label="Hapus">${I('x', 'w-4 h-4')}</button></div></div></article>`).join('') || `<div class="col-span-full">${kosong('Belum ada produk favorit.', 'Jelajahi Produk', '/#katalog')}</div>`;
+    const [ids, ps] = await Promise.all([Api.favorit(), Api.produk()]), f = ps.filter(p => ids.includes(p.id)), el = $('#f-isi');
+    if (f.length) T.daftar(el, 't-favorit', f); else el.replaceChildren(Object.assign(kosong('Belum ada produk favorit.', 'Jelajahi produk', '/#katalog'), { className: 'col-span-full' }));
+    if (!f.length) el.firstElementChild.classList.add('col-span-full');
   },
   async statistik() {
-    $('#s-tab').innerHTML = tab({ semua: 'Semua Waktu', bulan: 'Bulanan', minggu: 'Mingguan', hari: 'Hari Ini' }, rentang, 'rentang');
-    const os = (await Api.pesananSaya()).filter(o => ['diproses', 'dikirim', 'selesai'].includes(o.status)), t = os.map(o => ({ t: o.dibuat, v: o.total })), sb = Grafik.seri(t, rentang, i => i.v), sj = Grafik.seri(t, rentang, () => 1);
-    const jum = sj.data.reduce((a, b) => a + b, 0), tot = sb.data.reduce((a, b) => a + b, 0);
-    $('#s-kartu').innerHTML = statCard('g1', 'Total Belanja', tot, 'pada rentang ini', 0).replace('data-hitung', 'data-rp="1" data-hitung') + statCard('g2', 'Jumlah Pesanan', jum, 'pesanan yang sudah dibayar', 1) + statCard('g3', 'Rata-rata Pesanan', jum ? tot / jum : 0, 'per transaksi', 2).replace('data-hitung', 'data-rp="1" data-hitung');
-    hitungAngka($('#s-kartu')); Grafik.bar($('#s-bar'), sb.labels, [{ nama: 'Belanja', warna: '#38995e', data: sb.data }]); Grafik.area($('#s-area'), sj.labels, sj.data, '#0f766e');
+    $('#s-tab').replaceChildren(...tabs({ semua: 'Semua waktu', bulan: 'Bulanan', minggu: 'Mingguan', hari: 'Hari ini' }, rentang, 'rentang'));
+    const os = (await Api.pesananSaya()).filter(LUNAS), t = os.map(o => ({ t: o.dibuat, v: o.total })), sb = Grafik.seri(t, rentang, i => i.v), sj = Grafik.seri(t, rentang, () => 1);
+    const jum = sj.data.reduce((a, b) => a + b, 0), tot = sb.data.reduce((a, b) => a + b, 0), k = $('#s-kartu');
+    k.replaceChildren(stat('g1', 'Total belanja', tot, 'pada rentang ini', true), stat('g2', 'Jumlah pesanan', jum, 'pesanan yang sudah dibayar'), stat('g3', 'Rata-rata pesanan', jum ? tot / jum : 0, 'per transaksi', true));
+    hitungAngka(k); Grafik.bar($('#s-bar'), sb.labels, [{ nama: 'Belanja', warna: '#38995e', data: sb.data }], rp); Grafik.area($('#s-area'), sj.labels, sj.data, '#0f766e', v => v + ' pesanan');
   },
   profil() { $('#pf-foto').innerHTML = avatar({ ...user, foto: fotoBaru || user.foto }, 'w-full h-full text-3xl'); $('#pf-user').value = user.username; $('#pf-email').value = user.email;
     $('#pf-tel').value = user.telepon || ''; $('#pf-alm').value = user.alamat || ''; $('#pf-kota').value = user.kota || ''; $('#pf-pos').value = user.kodePos || ''; },
 };
 
-// Form alamat tujuan; pesanan dibuat dari dalam modal agar galat validasi server tampil di form (tidak menutupnya).
-function checkoutDenganAlamat() {
-  return new Promise(ok => {
-    const v = x => K.esc(x || '');
-    const m = Modal.buka(`<form id="al" class="p-6 space-y-3" novalidate><h2 class="font-extrabold text-lg">Alamat Pengiriman</h2><p class="text-sm text-slate-500">Pesanan akan dikirim ke alamat ini.</p>
-      <input id="al-pen" class="in" maxlength="80" placeholder="Nama penerima" aria-label="Nama penerima" value="${v(user.username)}">
-      <input id="al-tel" class="in" maxlength="20" inputmode="tel" placeholder="Nomor HP (081234567890)" aria-label="Nomor HP" value="${v(user.telepon)}">
-      <textarea id="al-alm" rows="3" maxlength="200" class="in !h-auto py-2" placeholder="Alamat lengkap (jalan, nomor rumah, RT/RW, kelurahan)" aria-label="Alamat lengkap">${v(user.alamat)}</textarea>
-      <div class="grid grid-cols-2 gap-3"><input id="al-kota" class="in" maxlength="60" placeholder="Kota/Kabupaten" aria-label="Kota atau kabupaten" value="${v(user.kota)}"><input id="al-pos" class="in" maxlength="5" inputmode="numeric" placeholder="Kode pos" aria-label="Kode pos" value="${v(user.kodePos)}"></div>
-      <label class="flex items-center gap-2 text-sm"><input id="al-simpan" type="checkbox" class="accent-green-700" checked> Simpan sebagai alamat utama</label>
-      <p id="al-err" class="text-sm text-rose-600 min-h-5" role="alert"></p>
-      <div class="flex justify-end gap-2"><button type="button" data-tutup class="btn btn-o">Batal</button><button id="al-btn" class="btn btn-p">Buat Pesanan</button></div></form>`);
+/* ---- Checkout: pilih metode bayar + alamat; pesanan dibuat dari dalam modal agar galat validasi tampil di form ---- */
+function checkout() {
+  return new Promise(async ok => {
+    const dm = await metode(), m = Modal.dari('t-checkout', user, 'max-w-xl');
+    $('#co-metode', m).replaceChildren(...dm.map((x, i) => { const e = T.satu('t-opsi-metode', { ...x, ikon: IKON_METODE[x.kode] || 'card' }); $('input', e).checked = i === 0; return e; })); ikon(m);
     m.addEventListener('click', e => { if (e.target.closest('[data-tutup]')) ok(null); });
-    $('#al', m).onsubmit = async e => { e.preventDefault(); const b = $('#al-btn', m); b.disabled = true;
-      try { const o = await Api.checkout({ penerima: $('#al-pen', m).value, telepon: $('#al-tel', m).value, alamat: $('#al-alm', m).value,
+    $('form', m).onsubmit = async e => { e.preventDefault(); const b = $('#al-btn', m), pilih = $('input[name=metode]:checked', m); b.disabled = true;
+      if (!pilih) { $('#al-err', m).textContent = 'Pilih metode pembayaran.'; b.disabled = false; return; }
+      try { const o = await Api.checkout({ metode: pilih.value, penerima: $('#al-pen', m).value, telepon: $('#al-tel', m).value, alamat: $('#al-alm', m).value,
                                           kota: $('#al-kota', m).value, kodePos: $('#al-pos', m).value, simpan: $('#al-simpan', m).checked });
         m.tutup(); ok(o); }
       catch (x) { $('#al-err', m).textContent = x.message; b.disabled = false; } };
   });
 }
-const tujuanHtml = o => o.pengiriman ? `<p class="mt-2 text-xs text-slate-500">Dikirim ke: <b>${K.esc(o.pengiriman.penerima)}</b> &middot; ${K.esc(o.pengiriman.telepon)} &middot; ${K.esc(o.pengiriman.alamat)}, ${K.esc(o.pengiriman.kota)} ${K.esc(o.pengiriman.kodePos)}</p>` : '';
-async function bayar(id) {
-  const o = (await Api.pesananSaya()).find(x => x.id === id); if (!o) return Toast.err('Pesanan tidak ditemukan.'); let bukti = null;
-  const m = Modal.buka(`<div class="p-6"><h2 class="font-extrabold text-lg">${o.ditolak ? 'Upload Ulang Bukti Bayar' : 'Pembayaran QRIS'} #${o.id}</h2>${o.ditolak ? `<p class="text-sm rounded-xl bg-rose-50 text-rose-700 px-3 py-2 mt-2">Pembayaran sebelumnya ditolak${o.alasan ? ': ' + K.esc(o.alasan) : ''}. Silakan upload ulang bukti bayar yang benar.</p>` : ''}<p class="text-sm text-slate-500 mt-1">Scan kode di bawah lalu bayar sesuai nominal.</p>
-    <div class="mx-auto my-4 w-52 h-52 p-3 rounded-2xl border-2 border-brand-200 bg-white">${QR(o.id + 7)}</div><p class="text-center text-xs text-slate-400 -mt-2 mb-2">QRIS toko (simulasi)</p>
-    <p class="text-center text-2xl font-extrabold text-brand-700">${rp(o.total)}</p>
-    <label class="block mt-5 text-sm font-semibold">Unggah bukti pembayaran</label><input id="bk-file" type="file" accept="image/jpeg,image/png,image/webp" class="mt-1 w-full text-sm file:mr-3 file:btn file:btn-o file:border-0 file:rounded-xl file:px-3 file:py-2 file:bg-brand-100 file:text-brand-800 file:font-semibold">
-    <img id="bk-prev" class="hidden mt-3 max-h-48 rounded-xl mx-auto" alt="Pratinjau bukti"><p id="bk-err" class="text-sm text-rose-600 min-h-5 mt-2" role="alert"></p>
-    <div class="flex justify-end gap-2 mt-3"><button data-tutup class="btn btn-o">Nanti</button><button id="bk-kirim" class="btn btn-p" disabled>Kirim Bukti</button></div></div>`);
-  $('#bk-file', m).onchange = async e => { const f = e.target.files[0], er = await K.cekGambar(f), p = $('#bk-prev', m); $('#bk-err', m).textContent = er || ''; $('#bk-kirim', m).disabled = true; if (er) { p.classList.add('hidden'); e.target.value = ''; return; }
-    try { bukti = await K.kecilkan(f); p.src = bukti; p.classList.remove('hidden'); $('#bk-kirim', m).disabled = false; } catch (x) { $('#bk-err', m).textContent = x.message; } };
-  $('#bk-kirim', m).onclick = async () => { const b = $('#bk-kirim', m); b.disabled = true; try { await Api.bayar(id, bukti); m.tutup(); Toast.ok('Bukti terkirim. Menunggu verifikasi admin.'); R.pesanan(); } catch (x) { $('#bk-err', m).textContent = x.message; b.disabled = false; } };
+
+/* ---- Konfirmasi barang diterima (foto opsional). Tanpa konfirmasi, pesanan selesai otomatis 24 jam setelah admin menandai tiba. ---- */
+async function terima(id) {
+  const o = await Api.pesananById(id); if (!o) return Toast.err('Pesanan tidak ditemukan.'); let foto = null;
+  const m = Modal.dari('t-terima', { ...o, infoTiba: !!o.batasTerima }, 'max-w-md');
+  $('#tr-file', m).onchange = async e => { const f = e.target.files[0], er = await K.cekGambar(f), p = $('#tr-prev', m); $('#tr-err', m).textContent = er || ''; foto = null;
+    if (er) { p.classList.add('hidden'); e.target.value = ''; return; }
+    try { foto = await K.kecilkan(f, 900); p.src = foto; p.classList.remove('hidden'); } catch (x) { $('#tr-err', m).textContent = x.message; } };
+  $('#tr-kirim', m).onclick = async () => { const b = $('#tr-kirim', m); b.disabled = true;
+    try { await Api.terima(id, foto); m.tutup(); Toast.ok('Terima kasih! Pesanan selesai.'); R.pesanan(); } catch (x) { $('#tr-err', m).textContent = x.message; b.disabled = false; } };
 }
+
+/* ---- Ulasan: bintang 1-5, awalnya belum dipilih ---- */
 async function ulas(pid) {
-  const p = await Api.produkById(pid); if (!p) return Toast.err('Produk tidak ditemukan.'); let r = 5;
-  const m = Modal.buka(`<div class="p-6"><h2 class="font-extrabold text-lg">Ulasan ${K.esc(p.nama)}</h2><div id="ul-bin" class="text-3xl my-3 flex gap-1" role="radiogroup" aria-label="Rating"></div>
-    <textarea id="ul-teks" rows="4" maxlength="300" class="in !h-auto py-2" placeholder="Ceritakan pengalamanmu..."></textarea><p class="text-xs text-slate-500 mt-1">Ulasan langsung tampil di halaman produk. Admin dapat memberi komentar.</p><p id="ul-err" class="text-sm text-rose-600 min-h-5" role="alert"></p>
-    <div class="flex justify-end gap-2 mt-2"><button data-tutup class="btn btn-o">Batal</button><button id="ul-kirim" class="btn btn-p">Kirim</button></div></div>`, 'max-w-md');
-  const g = () => $('#ul-bin', m).innerHTML = [1, 2, 3, 4, 5].map(i => `<button data-r="${i}" class="${i <= r ? 'text-sun-500' : 'text-slate-300'} hover:scale-125 transition" aria-label="${i} bintang">★</button>`).join(''); g();
-  $('#ul-bin', m).onclick = e => { const b = e.target.closest('[data-r]'); if (b) { r = +b.dataset.r; g(); } };
-  $('#ul-kirim', m).onclick = async () => { try { await Api.kirimUlasan(pid, r, $('#ul-teks', m).value); m.tutup(); Toast.ok('Ulasan berhasil dipublikasikan.'); R.pesanan(); } catch (x) { $('#ul-err', m).textContent = x.message; } };
+  const p = await Api.produkById(pid); if (!p) return Toast.err('Produk tidak ditemukan.'); let r = 0;
+  const m = Modal.dari('t-ulas', p, 'max-w-md'), bin = $('#ul-bin', m);
+  const gambar = () => bin.replaceChildren(...[1, 2, 3, 4, 5].map(n => T.satu('t-bintang-pilih', { n, on: n <= r, aktif: n === r })));
+  gambar(); bin.onclick = e => { const b = e.target.closest('[data-r]'); if (b) { r = +b.dataset.r; gambar(); } };
+  $('#ul-kirim', m).onclick = async () => { if (!r) return $('#ul-err', m).textContent = 'Pilih rating 1 sampai 5 bintang.';
+    try { await Api.kirimUlasan(pid, r, $('#ul-teks', m).value); m.tutup(); Toast.ok('Ulasan berhasil dipublikasikan.'); R.pesanan(); } catch (x) { $('#ul-err', m).textContent = x.message; } };
 }
+
 document.addEventListener('click', async e => {
-  const a = e.target.closest('[data-aksi]'); if (!a) return; const id = +a.dataset.id, v = a.dataset.v;
+  const a = e.target.closest('[data-aksi]'); if (!a) return; const kartu = a.closest('[data-id]'), id = +(a.dataset.id || (kartu && kartu.dataset.id)), v = a.dataset.v;
   try { switch (a.dataset.aksi) {
     case 'qty': { const c = (await Api.keranjang()).find(x => x.produkId === id); if (!c) break; const n = c.qty + +a.dataset.d; if (n < 1) break; await Api.kerSet(id, n); R.keranjang(); break; }
     case 'hapus': await Api.kerHapus(id); R.keranjang(); Toast.ok('Item dihapus.'); break;
-    case 'checkout': { const o = await checkoutDenganAlamat(); if (!o) break; user = await Api.saya(true); Toast.ok('Pesanan dibuat. Silakan bayar.'); filterPesanan = 'semua'; location.hash = '#pesanan'; setTimeout(() => bayar(o.id), 300); break; }
+    case 'checkout': { const o = await checkout(); if (!o) break; user = await Api.saya(true); Toast.ok('Pesanan dibuat. Lanjut ke pembayaran.'); location.href = '/bayar/' + o.id; break; }
     case 'tabPesanan': filterPesanan = v; R.pesanan(); break; case 'rentang': rentang = v; R.statistik(); break;
-    case 'bayar': bayar(id); break;
-    case 'va': { const d = await Api.midtransBuat(id); location.href = d.redirectUrl; break; }
-    case 'lacak': lacakAwal = String(id); if (location.hash === '#lacak') R.lacak(); else location.hash = '#lacak'; break; case 'ulas': ulas(+a.dataset.p); break;
-    case 'batal': if (await Modal.konfirmasi('Batalkan pesanan ini?', 'Batalkan')) { await Api.batal(id); Toast.ok('Pesanan dibatalkan.'); R.pesanan(); } break;
-    case 'terima': if (await Modal.konfirmasi('Konfirmasi barang sudah kamu terima?', 'Sudah Diterima')) { await Api.terima(id); Toast.ok('Terima kasih! Pesanan selesai.'); R.pesanan(); } break;
+    case 'lacak': lacakAwal = String(id); if (location.hash === '#lacak') R.lacak(); else location.hash = '#lacak'; break;
+    case 'ulas': ulas(+a.dataset.p); break;
+    case 'batal': if (await Modal.konfirmasi('Batalkan pesanan ini? Tagihan pembayarannya ikut dibatalkan.', 'Batalkan pesanan')) { await Api.batal(id); Toast.ok('Pesanan dibatalkan.'); R.pesanan(); } break;
+    case 'terima': terima(id); break;
     case 'favCart': await Api.kerAdd(id, 1); Toast.ok('Ditambahkan ke keranjang.'); badgeNav(); break;
     case 'favHapus': await Api.favToggle(id); R.favorit(); break; } } catch (er) { Toast.err(er.message); }
 });
@@ -136,15 +126,7 @@ $('#pf-file').onchange = async e => { const f = e.target.files[0], er = await K.
 $('#pf').onsubmit = async e => { e.preventDefault(); try { user = await Api.profil({ username: $('#pf-user').value.trim(), email: $('#pf-email').value.trim(), foto: fotoBaru,
     telepon: $('#pf-tel').value.trim(), alamat: $('#pf-alm').value.trim(), kota: $('#pf-kota').value.trim(), kodePos: $('#pf-pos').value.trim() }); fotoBaru = null; Dash.segarkanAvatar(user); $('#pf-err').textContent = ''; Toast.ok('Profil diperbarui.'); } catch (x) { $('#pf-err').textContent = x.message; } };
 $('#pf-ganti-email').onclick = () => {
-  const m = Modal.buka(`<div class="p-6 space-y-4"><h2 class="font-extrabold text-lg">Ganti email</h2>
-    <div id="ge-1" class="space-y-3"><p class="text-sm text-slate-500">Kami kirim kode 6 angka ke email baru. Email lama tetap dipakai sampai kode dimasukkan.</p>
-      <div><label class="text-sm font-semibold" for="ge-email">Email baru</label><input id="ge-email" type="email" class="in mt-1" maxlength="100" autocomplete="off"></div>
-      <div><label class="text-sm font-semibold" for="ge-pw">Password saat ini</label><input id="ge-pw" type="password" class="in mt-1" maxlength="64" autocomplete="current-password"></div></div>
-    <div id="ge-2" class="hidden space-y-3"><p class="text-sm text-slate-600">Kode dikirim ke <b id="ge-tujuan" class="break-all"></b>. Berlaku <span id="ge-menit"></span> menit. Cek juga folder spam.</p>
-      <input id="ge-kode" inputmode="numeric" maxlength="6" placeholder="------" aria-label="Kode OTP 6 angka" class="in text-center font-bold tracking-[.6em]" autocomplete="one-time-code"></div>
-    <p id="ge-err" class="text-sm text-rose-600 min-h-5" role="alert"></p>
-    <div class="flex justify-end gap-2"><button type="button" data-tutup class="btn btn-o">Batal</button><button type="button" id="ge-ok" class="btn btn-p">Kirim Kode</button></div></div>`);
-  let tahap = 1; const err = $('#ge-err', m), btn = $('#ge-ok', m);
+  const m = Modal.dari('t-ganti-email', {}); let tahap = 1; const err = $('#ge-err', m), btn = $('#ge-ok', m);
   btn.onclick = async () => {
     err.textContent = ''; btn.disabled = true;
     try {
@@ -166,8 +148,7 @@ $('#pf-ganti-email').onclick = () => {
 };
 (async () => {
   user = await Sesi.wajib('customer'); if (!user) return;
-  $('#app').hidden = false; $('#ikon-menu').innerHTML = I('menu');
-  $$('.nav-item').forEach(a => { const s = a.querySelector('.ic') || a.querySelector('[data-ikon]'); if (s) s.innerHTML = I(a.dataset.ikon || 'out'); });
+  $('#app').hidden = false; ikon();
   Dash.init(R, user); badgeNav().catch(() => {});
   lencanaC = Chat.lencana('pesan', () => Api.chatBelum());
 })();
