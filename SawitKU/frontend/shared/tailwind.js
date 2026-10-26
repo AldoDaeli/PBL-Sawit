@@ -1,9 +1,10 @@
 // Konfigurasi Tailwind (dimuat setelah tailwind CDN). Palet hijau + animasi bersama.
 tailwind.config = {
   theme: { extend: {
-    fontFamily: { sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'] },
+    fontFamily: { sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'], display: ['"Bricolage Grotesque"', '"Plus Jakarta Sans"', 'system-ui', 'sans-serif'] },
     colors: { brand: { 50:'#f0f9f2',100:'#dcf1e1',200:'#bbe3c6',300:'#8ccda2',400:'#5ab37c',500:'#38995e',600:'#297b4a',700:'#22623d',800:'#1e4e33',900:'#173f2a' },
-              sun: { 400:'#f7c948', 500:'#f0b429' } },
+              sun: { 400:'#f7c948', 500:'#f0b429' },
+              kertas: '#f6f8f2' },
     keyframes: {
       'fade-up': { '0%':{opacity:0,transform:'translateY(18px)'}, '100%':{opacity:1,transform:'none'} },
       'fade-in': { '0%':{opacity:0}, '100%':{opacity:1} },
