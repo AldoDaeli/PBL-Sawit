@@ -2,7 +2,7 @@
 /* Beranda: data dari API, markup dari <template> di index.html (lihat T di core.js). */
 const S = { kat: '', harga: '', rating: 0, urut: 'populer', q: '' };
 // Satu sumber data kontak toko: ganti nomor/email di sini saja (nomor WhatsApp format internasional tanpa + / 0 di depan)
-const KONTAK = { wa: '6281234567890', waTampil: '+62 812-3456-7890', email: 'halo@sawitku.id', jam: 'Senin–Sabtu, 08.00–17.00 WIB' };
+const KONTAK = { wa: '6285147314821', waTampil: '+62 851-4731-4821', email: 'pblrkstim042025@gmail.com', jam: 'Senin–Sabtu, 08.00–17.00 WIB' };
 const linkWa = teks => `https://wa.me/${KONTAK.wa}?text=${encodeURIComponent(teks)}`;
 const linkEmail = subjek => `mailto:${KONTAK.email}?subject=${encodeURIComponent(subjek)}`;
 const FITUR = [['leaf', 'Segar dari kebun', 'Dipilih langsung dan dikirim segar.'], ['shield', 'Garansi hidup', 'Layu dalam 7 hari, kami ganti.'], ['card', 'Bayar lewat Midtrans', 'QRIS atau Virtual Account bank pilihanmu.'], ['msg', 'Konsultasi gratis', 'Tanya cara rawat kapan saja.']];
