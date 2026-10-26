@@ -2,29 +2,37 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="no-referrer"><meta name="robots" content="noindex"><link rel="icon" type="image/png" sizes="32x32" href="/shared/favicon-32.png"><link rel="icon" href="/shared/favicon.ico" sizes="any"><link rel="apple-touch-icon" href="/shared/apple-touch-icon.png">
-<title>Dashboard Admin | SawitKu</title>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com"></script><script src="/shared/tailwind.js"></script><link rel="stylesheet" href="/admin/style.css">
+<title>Dashboard Admin | SawitKU</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script><script src="/shared/tailwind.js"></script><link rel="stylesheet" href="/shared/base.css"><link rel="stylesheet" href="/admin/style.css">
 </head>
 <body class="font-sans text-slate-800 antialiased"><div id="app" class="flex min-h-screen" hidden>
 <div id="overlay" class="hidden fixed inset-0 bg-slate-900/50 z-50 lg:hidden"></div>
-<aside id="sidebar" class="sidebar bg-white shadow-xl shadow-slate-200/60 flex flex-col p-4 sticky top-0 h-screen shrink-0 overflow-y-auto overflow-x-hidden" aria-label="Navigasi utama">
-  <a href="/" class="flex items-center gap-3 px-2 h-12 font-extrabold text-xl text-brand-700"><img src="/shared/logo.png" alt="Logo SawitKu" width="48" height="48" class="w-10 h-10 rounded-xl object-cover shrink-0"><span class="lbl">Sawit<span class="text-sun-500">Ku</span></span></a>
+<aside id="sidebar" class="sidebar bg-white border-r border-slate-200 flex flex-col p-4 sticky top-0 h-screen shrink-0 overflow-y-auto overflow-x-hidden" aria-label="Navigasi utama">
+  <a href="/" class="flex items-center gap-3 px-2 h-12 font-extrabold font-display text-xl text-brand-700"><img src="/shared/logo.png" alt="Logo SawitKU" width="48" height="48" class="w-10 h-10 rounded-xl object-cover shrink-0"><span class="lbl">Sawit<span class="text-sun-500">Ku</span></span></a>
   <div class="kartu-profil flex items-center gap-3 p-3 my-5 rounded-2xl bg-brand-50"><span class="js-avatar w-11 h-11 rounded-full overflow-hidden shrink-0"></span><div class="lbl min-w-0"><b class="js-user block truncate text-sm"></b><span class="text-xs text-slate-500">Administrator</span></div></div>
-  <nav class="flex flex-col gap-1.5 flex-1"><a href="#ringkasan" data-sec="ringkasan" data-ikon="chart" class="nav-item"><span class="ic"></span><span class="lbl">Ringkasan</span></a><a href="#produk" data-sec="produk" data-ikon="leaf" class="nav-item"><span class="ic"></span><span class="lbl">Kelola Produk</span></a><a href="#pembayaran" data-sec="pembayaran" data-ikon="card" class="nav-item"><span class="ic"></span><span class="lbl">Verifikasi Pembayaran</span></a><a href="#lacak" data-sec="lacak" data-ikon="truck" class="nav-item"><span class="ic"></span><span class="lbl">Lacak Paket</span></a><a href="#pengguna" data-sec="pengguna" data-ikon="users" class="nav-item"><span class="ic"></span><span class="lbl">Akun Pengguna</span></a><a href="#ulasan" data-sec="ulasan" data-ikon="star" class="nav-item"><span class="ic"></span><span class="lbl">Ulasan Produk</span></a><a href="#pesan" data-sec="pesan" data-ikon="msg" class="nav-item"><span class="ic"></span><span class="lbl">Pesan Masuk</span></a></nav>
+  <nav class="flex flex-col gap-1 flex-1">
+    <a href="#ringkasan" data-sec="ringkasan" class="nav-item"><span data-ikon="chart"></span><span class="lbl">Ringkasan</span></a>
+    <a href="#produk" data-sec="produk" class="nav-item"><span data-ikon="leaf"></span><span class="lbl">Kelola Produk</span></a>
+    <a href="#pembayaran" data-sec="pembayaran" class="nav-item"><span data-ikon="card"></span><span class="lbl">Pesanan &amp; Pembayaran</span></a>
+    <a href="#lacak" data-sec="lacak" class="nav-item"><span data-ikon="truck"></span><span class="lbl">Lacak Paket</span></a>
+    <a href="#pengguna" data-sec="pengguna" class="nav-item"><span data-ikon="users"></span><span class="lbl">Akun Pengguna</span></a>
+    <a href="#ulasan" data-sec="ulasan" class="nav-item"><span data-ikon="star"></span><span class="lbl">Ulasan Produk</span></a>
+    <a href="#pesan" data-sec="pesan" class="nav-item"><span data-ikon="msg"></span><span class="lbl">Pesan Masuk</span></a>
+  </nav>
   <button id="btn-logout" class="nav-item w-full mt-4 text-rose-600 hover:!bg-rose-50 hover:!text-rose-700"><span data-ikon="out"></span><span class="lbl">Keluar</span></button>
 </aside>
 <div class="flex-1 min-w-0 flex flex-col">
-  <header class="sticky top-0 z-30 h-16 bg-white/85 backdrop-blur flex items-center gap-3 px-4 sm:px-6 border-b border-slate-100">
-    <button id="btn-side" class="w-10 h-10 grid place-items-center rounded-xl hover:bg-brand-50 text-slate-600 transition" aria-label="Buka atau tutup menu samping" aria-expanded="true"><span id="ikon-menu"></span></button>
+  <header class="sticky top-0 z-30 h-16 bg-white/90 backdrop-blur flex items-center gap-3 px-4 sm:px-6 border-b border-slate-200">
+    <button id="btn-side" class="w-10 h-10 grid place-items-center rounded-xl hover:bg-brand-50 text-slate-600 transition" aria-label="Buka atau tutup menu samping" aria-expanded="true" data-ikon="menu"></button>
     <h1 id="judul" class="font-extrabold text-lg"></h1>
     <div class="ml-auto flex items-center gap-3"><a href="/" class="btn btn-o hidden sm:inline-flex">Lihat Toko</a><span class="js-avatar w-9 h-9 rounded-full overflow-hidden"></span></div>
   </header>
   <main class="p-4 sm:p-6 lg:p-8 max-w-6xl w-full mx-auto">
 <section id="sec-ringkasan" class="sec space-y-6"><div id="r-stat" class="grid sm:grid-cols-2 xl:grid-cols-4 gap-5"></div>
-  <div class="panel"><div class="flex flex-wrap justify-between items-center gap-3 mb-4"><h2 class="font-extrabold">Tren Pendapatan <span id="r-tren" class="ml-2 text-sm font-bold"></span></h2><div id="r-tab" class="flex gap-2 flex-wrap"></div></div><div id="r-area"></div></div>
-  <div class="grid lg:grid-cols-3 gap-6"><div class="panel lg:col-span-2"><h2 class="font-extrabold mb-4">Produk Terlaris</h2><div id="r-bar"></div></div><div class="panel"><h2 class="font-extrabold mb-4">Status Pesanan</h2><div id="r-donut"></div></div></div></section>
-<section id="sec-produk" class="sec hidden space-y-4"><div class="flex flex-wrap gap-3 justify-between"><input id="pr-cari" class="in max-w-xs" placeholder="Cari produk..." maxlength="60" aria-label="Cari produk"><button id="pr-baru" class="btn btn-p">Tambah Produk</button></div><div class="panel !p-0 overflow-x-auto"><table class="w-full text-sm"><thead class="text-left text-slate-500 bg-brand-50"><tr><th class="p-4">Produk</th><th>Kategori</th><th>Harga</th><th>Stok</th><th>Terjual</th><th class="pr-4 text-right">Aksi</th></tr></thead><tbody id="pr-isi"></tbody></table></div></section>
+  <div class="panel"><div class="flex flex-wrap justify-between items-center gap-3 mb-4"><h2 class="font-extrabold">Tren pendapatan <span id="r-tren" class="ml-2 text-sm font-bold"></span></h2><div id="r-tab" class="flex gap-2 flex-wrap"></div></div><div id="r-area"></div></div>
+  <div class="grid lg:grid-cols-3 gap-6"><div class="panel lg:col-span-2"><h2 class="font-extrabold mb-4">Produk terlaris</h2><div id="r-bar"></div></div><div class="panel"><h2 class="font-extrabold mb-4">Status pesanan</h2><div id="r-donut"></div></div></div></section>
+<section id="sec-produk" class="sec hidden space-y-4"><div class="flex flex-wrap gap-3 justify-between"><input id="pr-cari" class="in max-w-xs" placeholder="Cari produk..." maxlength="60" aria-label="Cari produk"><button id="pr-baru" class="btn btn-p"><span data-ikon="plus" data-kelas="w-4 h-4"></span>Tambah produk</button></div><div class="panel !p-0 overflow-x-auto"><table class="w-full text-sm"><thead class="text-left text-slate-500 bg-brand-50"><tr><th class="p-4">Produk</th><th>Kategori</th><th>Harga</th><th>Stok</th><th>Terjual</th><th>Rating</th><th class="pr-4 text-right">Aksi</th></tr></thead><tbody id="pr-isi"></tbody></table></div></section>
 <section id="sec-pembayaran" class="sec hidden space-y-4"><div id="pb-tab" class="flex gap-2 flex-wrap"></div><div id="pb-isi" class="space-y-4"></div></section>
 <section id="sec-pengguna" class="sec hidden"><div class="panel !p-0 overflow-x-auto"><table class="w-full text-sm"><thead class="text-left text-slate-500 bg-brand-50"><tr><th class="p-4">Pengguna</th><th>Email</th><th>Bergabung</th><th>Pesanan</th><th>Status</th><th class="pr-4 text-right">Aksi</th></tr></thead><tbody id="pg-isi"></tbody></table></div></section>
 <section id="sec-lacak" class="sec hidden"><div id="lacak-root"></div></section>
@@ -37,5 +45,91 @@
   <div id="ps-isi" class="grid md:grid-cols-2 gap-4 hidden"></div></section>
   </main>
 </div></div>
+
+<!-- ===== Template (HTML): JS hanya mengisi data lewat T (shared/core.js) ===== -->
+<template id="t-stat"><div class="kartu-stat" data-a-class="kartu-stat {warna}"><p class="text-sm font-semibold opacity-90 relative" data-t="judul"></p><p class="text-2xl font-extrabold font-display mt-2 relative" data-a-data-hitung="{nilai}" data-a-data-rp="{rp}">0</p><p class="text-xs mt-3 opacity-90 relative" data-t="ket"></p></div></template>
+<template id="t-kosong"><div class="panel text-center py-12 text-slate-500 col-span-full" data-t="teks"></div></template>
+<template id="t-tab"><button class="tab" data-cls="aktif=aktif" data-a-data-aksi="{aksi}" data-a-data-v="{kode}" data-t="nama"></button></template>
+
+<template id="t-produk-baris">
+  <tr class="baris border-t border-slate-100 hover:bg-brand-50/50"><td class="p-4"><div class="flex items-center gap-3"><img class="w-11 h-11 rounded-lg object-cover" data-src="gambar" alt=""><b class="max-w-[200px] truncate" data-t="nama"></b></div></td><td data-t="kategori"></td><td data-t="harga|rp"></td><td data-cls="tipis=text-rose-600 font-bold" data-t="stok"></td><td data-t="terjual"></td>
+    <td><span data-if="jumlahUlasan" class="inline-flex items-center gap-1"><span data-stars="rating"></span><span class="text-xs text-slate-500">(<span data-t="jumlahUlasan"></span>)</span></span><span data-ifnot="jumlahUlasan" class="text-xs text-slate-400">Belum ada</span></td>
+    <td class="pr-4"><div class="flex justify-end gap-2"><button class="btn btn-o !w-9 !px-0" data-aksi="edit" data-a-data-id="{id}" aria-label="Ubah"><span data-ikon="edit" data-kelas="w-4 h-4"></span></button><button class="btn btn-d !w-9 !px-0" data-aksi="hapusProduk" data-a-data-id="{id}" aria-label="Hapus"><span data-ikon="trash" data-kelas="w-4 h-4"></span></button></div></td></tr>
+</template>
+<template id="t-produk-kosong"><tr><td colspan="7" class="p-8 text-center text-slate-500">Produk tidak ditemukan.</td></tr></template>
+
+<template id="t-pesanan">
+  <article class="panel baris" data-a-data-id="{id}">
+    <div class="flex flex-wrap justify-between gap-2"><div><b class="font-display text-lg">#<span data-t="id"></span></b> <span class="text-slate-500 text-sm ml-1">oleh <span data-t="pembeli"></span> &middot; <span data-t="dibuat|tgl"></span></span></div><span class="lencana" data-a-class="lencana {kelasStatus}" data-t="namaStatus"></span></div>
+    <p class="text-sm text-slate-600 mt-2" data-t="ringkas"></p>
+    <div class="flex flex-wrap items-center justify-between gap-2 mt-3"><b class="text-brand-700 text-lg font-display" data-t="total|rp"></b><div class="flex flex-wrap gap-2">
+      <button data-if="bukti" class="btn btn-o" data-aksi="bukti"><span data-ikon="receipt" data-kelas="w-4 h-4"></span>Lihat bukti</button>
+      <button data-if="adaMidtrans" class="btn btn-o" data-aksi="cekMidtrans"><span data-ikon="refresh" data-kelas="w-4 h-4"></span>Cek Midtrans</button>
+      <button data-if="bisaVerifikasi" class="btn btn-d" data-aksi="tolak">Tolak</button>
+      <button data-if="bisaVerifikasi" class="btn btn-p" data-aksi="setuju">Setujui</button>
+      <button data-if="bisaLacak" class="btn btn-o" data-aksi="lacak">Lacak</button>
+      <button data-if="bisaKirim" class="btn btn-p" data-aksi="kirim">Tandai dikirim</button>
+      <button data-if="bisaSampai" class="btn btn-s" data-aksi="sampai"><span data-ikon="check" data-kelas="w-4 h-4"></span>Tandai sudah sampai</button></div></div>
+    <div data-if="adaMidtrans" class="mt-3 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 text-sm flex flex-wrap items-center gap-x-4 gap-y-1"><span class="text-slate-500">Pembayaran</span><b data-t="labelMetode"></b><span class="lencana" data-a-class="lencana {kelasMidtrans}" data-t="teksMidtrans"></span><span data-if="beda" class="text-xs text-amber-700">Midtrans belum mencatat pembayaran. Periksa bukti dengan teliti sebelum menyetujui.</span></div>
+    <p data-if="resi" class="mt-2 text-sm rounded-xl bg-violet-50 text-violet-800 px-3 py-2"><span data-t="kurir"></span> &middot; Resi <b class="select-all" data-t="resi"></b></p>
+    <p data-if="menungguTerima" class="mt-2 text-xs text-amber-800">Ditandai tiba <span data-t="waktu.sampai|wkt"></span>. Pesanan selesai otomatis <b data-t="batasTerima|wkt"></b> bila pembeli tidak konfirmasi.</p>
+    <div data-if="fotoTerima" class="mt-2 flex items-center gap-3 text-sm"><button class="shrink-0" data-aksi="fotoTerima" aria-label="Lihat foto barang diterima"><img class="w-14 h-14 rounded-lg object-cover border border-slate-200" data-src="fotoTerima" alt="Foto barang diterima"></button><span class="text-slate-600">Foto barang dari pembeli</span></div>
+    <p data-if="otomatis" class="mt-2 text-xs text-slate-500">Selesai otomatis (pembeli tidak mengonfirmasi dalam 24 jam).</p>
+    <p data-if="infoTolak" class="mt-2 text-xs text-rose-600">Bukti ditolak (<span data-t="ditolak"></span>x): <span data-t="alasan"></span>. Menunggu pembeli mengunggah ulang.</p>
+    <div data-if="pengiriman" class="mt-3 rounded-xl bg-brand-50 px-3 py-2 text-sm"><b class="text-brand-700 text-xs">Alamat pengiriman</b><p class="mt-0.5"><span data-t="pengiriman.penerima"></span> &middot; <span data-t="pengiriman.telepon"></span></p><p class="text-slate-600"><span data-t="pengiriman.alamat"></span>, <span data-t="pengiriman.kota"></span> <span data-t="pengiriman.kodePos"></span></p></div>
+    <p data-if="infoBatal" class="mt-2 text-xs text-rose-600">Alasan: <span data-t="alasan"></span></p>
+  </article>
+</template>
+
+<template id="t-pengguna-baris">
+  <tr class="baris border-t border-slate-100"><td class="p-4"><div class="flex items-center gap-3"><span data-avatar></span><b data-t="username"></b></div></td><td data-t="email"></td><td data-t="dibuat|tgl"></td><td data-t="jmlPesanan"></td>
+    <td><span class="lencana" data-cls="aktif=bg-brand-100 text-brand-800;!aktif=bg-rose-100 text-rose-800" data-t="teksStatus"></span></td><td class="pr-4 text-right"><button class="btn" data-cls="aktif=btn-d;!aktif=btn-p" data-aksi="toggleUser" data-a-data-id="{id}" data-t="teksAksi"></button></td></tr>
+</template>
+
+<template id="t-ulasan">
+  <article class="panel baris"><div class="flex justify-between gap-2"><div><b data-t="nama"></b><p class="text-xs text-slate-500"><span data-t="produk"></span> &middot; <span data-t="dibuat|tgl"></span></p></div><span data-stars="rating"></span></div><p class="text-sm text-slate-600 mt-3" data-t="teks"></p>
+    <div data-balasan></div>
+    <div class="flex justify-end mt-4"><button data-if="perluAdmin" class="btn btn-p" data-aksi="balas" data-a-data-id="{id}" data-t="labelBalas"></button><span data-ifnot="perluAdmin" class="text-xs text-slate-400">Menunggu balasan pelanggan</span></div></article>
+</template>
+<template id="t-balasan">
+  <div data-cls="admin=bg-brand-50 border-brand-500;pelanggan=ml-6 bg-slate-50 border-sun-400" class="mt-3 rounded-xl border-l-4 px-3 py-2 text-sm"><b class="text-xs" data-cls="admin=text-brand-700;pelanggan=text-slate-600"><span data-t="nama"></span> &middot; <span data-t="dibuat|tgl"></span></b><p class="text-slate-600 mt-0.5" data-t="teks"></p></div>
+</template>
+<template id="t-pesan-tamu">
+  <article class="panel baris"><div class="flex justify-between gap-2"><b data-t="nama"></b><span class="lencana bg-sun-400/30 text-amber-900" data-t="jenis"></span></div><p class="text-xs text-slate-500"><span data-t="email"></span> &middot; <span data-t="dibuat|tgl"></span></p><p class="text-sm mt-3" style="white-space:pre-wrap;overflow-wrap:anywhere" data-t="isi"></p><div class="flex justify-end mt-3"><a class="btn btn-o" data-a-href="{mailto}">Balas lewat email</a></div></article>
+</template>
+<template id="t-chat-item"><button type="button" class="w-full text-left rounded-xl px-3 py-2.5 hover:bg-brand-50 transition flex gap-3 items-center" data-cls="aktif=bg-brand-50" data-a-data-uid="{userId}"><div class="min-w-0 flex-1"><p class="font-bold text-sm truncate" data-t="nama"></p><p class="text-xs text-slate-500 truncate" data-t="cuplikan"></p></div><div class="text-right shrink-0 space-y-1"><p class="text-[10px] text-slate-400" data-t="tanggal"></p><span data-if="belum" class="inline-block min-w-[1.15rem] h-[1.15rem] px-1 rounded-full bg-sun-500 text-brand-900 text-[10px] font-bold leading-[1.15rem] text-center" data-t="belumTeks"></span></div></button></template>
+<template id="t-chat-kosong"><p class="text-center text-sm text-slate-500 py-10">Belum ada percakapan dari pelanggan.</p></template>
+
+<!-- Modal -->
+<template id="t-konfirmasi"><div class="p-6"><p class="font-semibold text-slate-800" data-t="pesan"></p><div class="flex justify-end gap-2 mt-6"><button data-tutup class="btn btn-o">Batal</button><button data-ya class="btn btn-p" data-t="tombol"></button></div></div></template>
+<template id="t-gambar"><div class="p-4"><img class="w-full rounded-xl" data-src="src" data-a-alt="{alt}"><button data-tutup class="btn btn-o w-full mt-3">Tutup</button></div></template>
+<template id="t-produk-form">
+  <form id="fp" class="p-6 space-y-3" novalidate><h2 class="font-extrabold text-lg" data-t="judul"></h2>
+    <input id="fp-nama" class="in" placeholder="Nama produk" maxlength="80" data-val="nama" aria-label="Nama"><select id="fp-kat" class="in" aria-label="Kategori"></select>
+    <div class="grid grid-cols-2 gap-3"><input id="fp-harga" type="number" min="1000" class="in" placeholder="Harga (Rp)" data-val="harga" aria-label="Harga"><input id="fp-stok" type="number" min="0" class="in" placeholder="Stok" data-val="stok" aria-label="Stok"></div>
+    <div class="flex items-center gap-3"><img id="fp-prev" class="w-16 h-16 rounded-xl object-cover bg-brand-50 hidden" data-src="gambar" alt=""><label class="btn btn-o cursor-pointer">Unggah foto<input id="fp-file" type="file" accept="image/jpeg,image/png,image/webp" class="hidden"></label></div>
+    <input id="fp-url" class="in" placeholder="atau URL gambar (https://...)" maxlength="300" data-val="urlGambar" aria-label="URL gambar">
+    <textarea id="fp-desk" rows="3" maxlength="400" class="in" placeholder="Deskripsi" data-val="deskripsi" aria-label="Deskripsi"></textarea>
+    <textarea id="fp-spek" rows="4" class="in" placeholder="Tinggi: 40 cm&#10;Cahaya: Terang" data-val="spekTeks" aria-label="Spesifikasi"></textarea><p class="text-xs text-slate-500 -mt-2">Satu spesifikasi per baris, format <b>Nama: nilai</b> (pakai tanda titik dua). Maksimal 12 baris. Rating produk dihitung otomatis dari ulasan pembeli.</p>
+    <label class="flex items-center gap-2 text-sm font-semibold"><input id="fp-best" type="checkbox" class="accent-green-700"> Tandai terlaris</label><p id="fp-err" class="text-sm text-rose-600 min-h-5" role="alert"></p>
+    <div class="flex justify-end gap-2"><button type="button" data-tutup class="btn btn-o">Batal</button><button class="btn btn-p">Simpan</button></div></form>
+</template>
+<template id="t-balas-modal"><div class="p-6"><h2 class="font-extrabold text-lg" data-t="judul"></h2><p class="text-sm text-slate-500 mt-1 mb-3">Ulasan: <span data-t="teks"></span></p><textarea id="bl" rows="4" maxlength="300" class="in" placeholder="Tulis komentar untuk pembeli..." data-val="komentar"></textarea><p id="bl-err" class="text-sm text-rose-600 min-h-5" role="alert"></p><div class="flex justify-end gap-2 mt-2"><button data-tutup class="btn btn-o">Batal</button><button id="bl-ok" class="btn btn-p">Kirim komentar</button></div></div></template>
+<template id="t-kirim-modal"><div class="p-6"><h2 class="font-extrabold text-lg">Kirim pesanan #<span data-t="id"></span></h2><p class="text-sm text-slate-500 mt-1">Isi kurir dan nomor resi. Pembeli bisa melacak paket dengan nomor ini.</p>
+  <label class="text-sm font-semibold mt-3 block" for="kr-kurir">Kurir</label><input id="kr-kurir" class="in mt-1" maxlength="30" list="kr-daftar" placeholder="JNE, J&T, SiCepat, ..." autocomplete="off"><datalist id="kr-daftar"><option>JNE</option><option>J&T</option><option>SiCepat</option><option>AnterAja</option><option>POS Indonesia</option><option>Ninja Xpress</option></datalist>
+  <label class="text-sm font-semibold mt-3 block" for="kr-resi">Nomor resi</label><input id="kr-resi" class="in mt-1 uppercase" maxlength="40" autocomplete="off"><p id="kr-err" class="text-sm text-rose-600 min-h-5 mt-2" role="alert"></p>
+  <div class="flex justify-end gap-2 mt-2"><button data-tutup class="btn btn-o">Batal</button><button id="kr-ok" class="btn btn-p">Tandai dikirim</button></div></div></template>
+<template id="t-tolak-modal"><div class="p-6"><h2 class="font-extrabold text-lg">Tolak pembayaran #<span data-t="id"></span></h2><p class="text-sm text-slate-500 mt-1">Pesanan tidak dibatalkan: pembeli akan melihat alasanmu dan diminta mengunggah ulang bukti bayar.</p><textarea id="tl" rows="3" maxlength="200" class="in mt-3" placeholder="Alasan penolakan"></textarea><div class="flex justify-end gap-2 mt-4"><button data-tutup class="btn btn-o">Batal</button><button id="tl-ok" class="btn btn-d">Tolak</button></div></div></template>
+
+<!-- Lacak paket -->
+<template id="t-lacak-form"><div><form class="panel flex flex-col sm:flex-row gap-3 max-w-2xl" novalidate><input class="in flex-1" maxlength="40" placeholder="Nomor pesanan (mis. 12) atau nomor resi" aria-label="Nomor pesanan atau resi" autocomplete="off"><button class="btn btn-p btn-besar">Lacak paket</button></form><p class="text-sm text-rose-600 min-h-5 mt-2" role="alert"></p><div class="hasil max-w-2xl mt-2"></div></div></template>
+<template id="t-lacak">
+  <div class="panel space-y-4"><div class="flex flex-wrap justify-between gap-2 items-start"><div><b class="text-lg font-display">Pesanan #<span data-t="id"></span></b>
+    <p data-if="adaResi" class="text-sm text-slate-500"><span data-t="kurir"></span> &middot; Resi <b class="text-slate-800 select-all" data-t="resi"></b></p><p data-if="tanpaResi" class="text-sm text-slate-500">Nomor resi belum tersedia (menunggu dikirim)</p></div><span class="lencana" data-a-class="lencana {kelasStatus}" data-t="namaStatus"></span></div>
+    <ol class="relative ml-3 border-l-2 border-brand-100 space-y-5 py-1"><template data-each="timeline"><li class="pl-6 relative"><span class="absolute -left-[13px] top-0 w-6 h-6 rounded-full grid place-items-center text-[11px] font-bold" data-cls="ok=bg-brand-600 text-white;belum=bg-slate-200 text-slate-400;gagal=!bg-rose-500;berjalan=ring-4 ring-brand-100" data-t="no"></span>
+      <p class="font-semibold text-sm" data-cls="belum=text-slate-400" data-t="label"></p><p class="text-xs text-slate-500" data-t="waktuTeks"></p></li></template></ol>
+    <div class="text-sm text-slate-600 border-t border-slate-100 pt-3"><span data-t="ringkas"></span><p data-if="tujuan" class="mt-1 text-xs text-slate-500" data-t="tujuan"></p></div></div>
+</template>
+
 <script src="/shared/core.js"></script><script src="/shared/chat.js"></script><script src="/admin/script.js"></script>
 </body></html>
