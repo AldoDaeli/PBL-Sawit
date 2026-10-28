@@ -1,5 +1,0 @@
-Flask
-qrcode[pil]
-Pillow
-gunicorn
-validators
