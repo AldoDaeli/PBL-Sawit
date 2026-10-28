@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>sawit.qr · QR &amp; Link Pendek</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body id="top">
+  <header class="site-header">
+    <div class="bar">
+      <a class="brand" href="#top" aria-label="sawit.qr, ke atas"><img class="brand-logo" src="logo.png" alt="" /><span class="brand-name">sawit<em>.qr</em></span></a>
+      <nav class="nav" aria-label="Navigasi utama">
+        <a href="#buat">Buat baru</a>
+        <a href="#riwayat">Riwayat</a>
+        <a href="#footer">Tentang</a>
+      </nav>
+      <button id="theme" class="ghost" type="button" aria-label="Ganti tema"><span class="t-light">Mode gelap</span><span class="t-dark">Mode terang</span></button>
+    </div>
+  </header>
+
+  <main class="shell">
+    <header class="top">
+      <div>
+        <h1>QR &amp; Link Pendek</h1>
+        <p>Perpendek link, cetak QR-nya, lalu pantau siapa yang membukanya.</p>
+        <div class="summary">
+          <div class="stat s1"><span>Link dibuat</span><b id="n-all">0</b><small>Semua link yang pernah dibuat</small></div>
+          <div class="stat s2"><span>Aktif</span><b id="n-live">0</b><small>Masih bisa dibuka</small></div>
+          <div class="stat s3"><span>Sudah mati</span><b id="n-dead">0</b><small>Masa aktif sudah habis</small></div>
+        </div>
+      </div>
+    </header>
+
+    <div class="workspace" id="buat">
+      <section id="composer" data-mode="short" class="panel\1"\2>
+        <h2 id="form-title">Buat baru</h2>
+        <div class="modes" role="radiogroup" aria-label="Fitur">
+          <label><input type="radio" name="tab" value="short" checked /><span>URL Shortener</span></label>
+          <label><input type="radio" name="tab" value="qr" /><span>QR Generator</span></label>
+        </div>
+        <div class="modes sub" id="sub-modes" data-for="qr pic logo wifi" role="radiogroup" aria-label="Jenis QR">
+          <label><input type="radio" name="mode" value="qr" checked /><span>QR dari teks</span></label>
+          <label><input type="radio" name="mode" value="pic" /><span>QR dari foto</span></label>
+          <label><input type="radio" name="mode" value="logo" /><span>QR dengan logo</span></label>
+          <label><input type="radio" name="mode" value="wifi" /><span>QR Wi-Fi</span></label>
+        </div>
+
+        <form id="form" novalidate>
+          <div data-for="short">
+            <label class="field"><span>Link panjang</span>
+              <input id="url" type="text" placeholder="https://contoh.com/halaman/yang/sangat/panjang" autocomplete="off" /></label>
+            <div class="row">
+              <label class="field"><span>Alias (opsional)</span>
+                <input id="alias" type="text" placeholder="proyek-kelas" autocomplete="off" maxlength="30" /></label>
+              <label class="field"><span>Masa aktif</span>
+                <select id="expires">
+                  <option value="">Selamanya</option><option value="1">1 hari</option>
+                  <option value="7">7 hari</option><option value="30">30 hari</option>
+                </select></label>
+            </div>
+          </div>
+
+          <div data-for="qr logo">
+            <label class="field"><span>Teks atau link</span>
+              <textarea id="text" rows="3" maxlength="1000" placeholder="Teks, link, atau data apa saja"></textarea></label>
+          </div>
+
+          <div class="field" id="pic-field" data-for="pic" data-state="idle">
+            <span>Foto yang dijadikan QR</span>
+            <div id="pic-drop" class="drop" tabindex="0" role="button" aria-label="Pilih atau seret foto">
+              <input id="pic-file" type="file" accept="image/*" hidden />
+              <div class="drop-idle" data-when="idle"><strong>Seret &amp; lepas foto di sini</strong><small>atau klik untuk memilih · maks. 8 MB</small></div>
+              <div class="drop-has" data-when="filled">
+                <img id="pic-prev" alt="Pratinjau foto" />
+                <div class="drop-info"><b id="pic-name"></b><small>QR akan membuka foto ini</small></div>
+                <button id="pic-remove" type="button" class="ghost">Hapus</button>
+              </div>
+            </div>
+          </div>
+
+          <div data-for="wifi">
+            <label class="field"><span>Nama Wi-Fi (SSID)</span><input id="ssid" type="text" autocomplete="off" /></label>
+            <label class="field"><span>Kata sandi</span><input id="wpass" type="text" autocomplete="off" placeholder="Kosongkan jika tanpa sandi" /></label>
+          </div>
+
+          <div class="field" id="logo-field" data-for="logo" data-state="idle">
+            <span>Logo di tengah QR</span>
+            <div id="drop" class="drop" tabindex="0" role="button" aria-label="Pilih atau seret foto logo">
+              <input id="logo-file" type="file" accept="image/*" hidden />
+              <div class="drop-idle" data-when="idle">
+                <strong>Seret &amp; lepas foto di sini</strong>
+                <small>atau klik untuk memilih · bisa juga tempel dengan Ctrl+V</small>
+              </div>
+              <div class="drop-has" data-when="filled">
+                <img id="logo-prev" alt="Pratinjau logo" />
+                <div class="drop-info"><b id="logo-name"></b><small id="logo-note" data-removed="Background berhasil dihapus" data-transparent="Gambar sudah transparan" data-none="Background tidak terdeteksi, pakai gambar asli" data-failed="Background sulit dideteksi, coba geser kepekaan" data-off="Dipakai apa adanya"></small></div>
+                <button id="logo-remove" type="button" class="ghost">Hapus logo</button>
+              </div>
+            </div>
+            <div class="logo-opts" data-when="filled">
+              <label class="check"><input id="bg-auto" type="checkbox" checked /> Hapus background otomatis</label>
+              <label class="slide"><span>Kepekaan</span><input id="bg-tol" type="range" min="15" max="120" value="55" /></label>
+            </div>
+          </div>
+
+          <p id="error" class="error" role="alert" hidden></p>
+          <button id="submit" class="primary" type="submit"><span data-for="short">Perpendek link</span><span data-for="qr pic logo wifi">Buat QR</span></button>
+        </form>
+      </section>
+
+      <section id="preview" data-view="empty" class="panel preview"\1>
+        <h2 id="preview-title">Hasil</h2>
+        <div class="empty" data-in="empty">Hasil akan muncul di sini setelah form diisi.</div>
+        <div class="result">
+          <div class="tag" data-in="qr qr-link"><img id="qr" alt="QR code" /></div>
+          <div class="short-row" data-in="link qr-link">
+            <a id="short-link" target="_blank" rel="noopener"></a>
+            <button id="copy" type="button" class="ghost">Salin link</button>
+          </div>
+          <div class="downloads" data-in="qr qr-link">
+            <a id="dl-png" class="btn" href="#" download="qr-code.png">Unduh PNG</a>
+            <a id="dl-svg" class="btn" href="#">Unduh SVG</a>
+            <button id="copy-img" type="button">Salin gambar</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel history" id="riwayat" aria-labelledby="history-title">
+      <div class="history-head">
+        <h2 id="history-title">Link yang sudah dibuat</h2>
+        <input id="search" type="search" placeholder="Cari link atau tujuan" aria-label="Cari link" />
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Link pendek</th><th>Tujuan</th><th class="num">Klik</th><th>Aksi</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <p id="no-links" class="empty" data-none="Belum ada link. Buat yang pertama di atas." data-nomatch="Tidak ada link yang cocok." hidden></p>
+    </section>
+  </main>
+
+  <dialog id="detail">
+    <form method="dialog" class="dlg-head"><h2 id="d-title"></h2><button class="ghost" aria-label="Tutup">Tutup</button></form>
+    <p id="d-meta" class="muted"></p>
+    <div id="d-chart" class="chart" role="img" aria-label="Klik dan pindaian QR 14 hari terakhir"></div>
+    <div class="legend"><i class="k1"></i>Klik link <i class="k2"></i>Pindai QR</div>
+    <div class="cols"><div><h3>Perangkat</h3><ul id="d-dev"></ul></div><div><h3>Asal klik</h3><ul id="d-ref"></ul></div></div>
+    <label class="field"><span>Ubah tujuan (QR yang sudah dicetak tetap berlaku)</span>
+      <span class="inline"><input id="d-url" type="text" /><button id="d-save" class="primary" type="button">Simpan</button></span></label>
+  </dialog>
+
+  <footer class="site-footer" id="footer">
+    <div class="foot-inner">
+      <a class="brand brand-lg" href="#top" aria-label="sawit.qr, ke atas"><img class="brand-logo" src="logo.png" alt="" /><span class="brand-name">sawit<em>.qr</em></span></a>
+
+      <div class="foot-cols">
+        <section>
+          <h2>Layanan</h2>
+          <ul>
+            <li><a href="#buat" data-mode="short">Perpendek link</a></li>
+            <li><a href="#buat" data-mode="qr">QR dari teks</a></li>
+            <li><a href="#buat" data-mode="pic">QR dari foto</a></li>
+            <li><a href="#buat" data-mode="wifi">QR Wi-Fi</a></li>
+            <li><a href="#buat" data-mode="logo">QR dengan logo</a></li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Tentang</h2>
+          <ul>
+            <li><a href="#riwayat">Link yang dibuat</a></li>
+            <li><a href="#top">Kembali ke atas</a></li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Ada pertanyaan?</h2>
+          <!-- GANTI isi di bawah ini dengan data kontak kamu -->
+          <ul class="contact">
+            <li>sawit.qr</li>
+            <li><a href="tel:+620000000000">0000-0000-0000</a></li>
+            <li><a href="mailto:nama@email-kamu.com">nama@email-kamu.com</a></li>
+          </ul>
+        </section>
+      </div>
+
+      <p class="copy">© <span id="year">2026</span>, sawit.qr.</p>
+    </div>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <!-- Template markup: JS hanya menyalin dan mengisi data -->
+  <template id="tpl-row">
+    <tr>
+      <td><a data-f="short" target="_blank" rel="noopener"></a><span class="badge" data-f="badge" hidden></span></td>
+      <td class="dest" data-f="url"></td>
+      <td class="num" data-f="clicks"></td>
+      <td class="actions">
+        <button type="button" data-act="qr">QR</button>
+        <button type="button" data-act="detail">Detail</button>
+        <button type="button" class="danger" data-act="delete">Hapus</button>
+      </td>
+    </tr>
+  </template>
+  <template id="tpl-bar">
+    <div class="chart-bar"><span class="stack"><i class="seg link"></i><i class="seg qr"></i></span><small data-f="label"></small></div>
+  </template>
+  <template id="tpl-li"><li><span data-f="name"></span><b data-f="count"></b></li></template>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
