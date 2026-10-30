@@ -1,0 +1,20 @@
+name: Release
+
+# Buat tag lalu push, mis.:  git tag v1.0.0 && git push origin v1.0.0
+# GitHub otomatis membuat halaman Release lengkap dengan changelog dari commit/PR.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Buat release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" --generate-notes --title "SawitKu $GITHUB_REF_NAME"
