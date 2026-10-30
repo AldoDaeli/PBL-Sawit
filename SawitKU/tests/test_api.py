@@ -719,7 +719,7 @@ class TestPerforma(Dasar):
     def test_gzip_hanya_bila_diminta_dan_sah(self):
         r = self.c.get('/api/produk', headers={'Accept-Encoding': 'identity'}); self.assertNotIn('Content-Encoding', r.headers)
         r = self.c.get('/api/produk', headers={'Accept-Encoding': 'gzip'}); self.assertEqual(r.headers.get('Content-Encoding'), 'gzip')
-        import gzip, json; self.assertEqual(len(json.loads(r.content)['data']), 12); self.assertIn('Accept-Encoding', r.headers['Vary'])
+        import json; self.assertEqual(len(json.loads(r.content)['data']), 12); self.assertIn('Accept-Encoding', r.headers['Vary'])
         r = self.c.get('/shared/core.js', headers={'Accept-Encoding': 'gzip'}); self.assertEqual(r.headers.get('Content-Encoding'), 'gzip')
         self.assertIn('const Api', r.content.decode())
         r2 = self.c.get('/shared/core.js', headers={'Accept-Encoding': 'gzip'}); self.assertEqual(r.content, r2.content)     # versi kompresi di-cache memori
