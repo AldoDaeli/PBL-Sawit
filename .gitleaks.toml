@@ -1,0 +1,7 @@
+# Letakkan di ROOT repo (sejajar dengan folder .github dan SawitKU)
+[extend]
+useDefault = true   # tetap pakai semua aturan bawaan gitleaks
+
+[allowlist]
+description = "File contoh berisi placeholder kosong, bukan rahasia asli"
+paths = ['''\.env\.example$''']
