@@ -6,7 +6,7 @@ from flask import g, jsonify, make_response, request
 from werkzeug.exceptions import HTTPException
 
 from .config import cfg
-from .db import mulai_konteks, konteks, tutup
+from .db import mulai_konteks, tutup
 from .errors import ApiError
 
 log = logging.getLogger('sawitku')

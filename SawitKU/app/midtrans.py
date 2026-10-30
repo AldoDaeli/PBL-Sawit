@@ -42,7 +42,7 @@ def _panggil(url, payload=None):
     req = urllib.request.Request(url, data=None if payload is None else json.dumps(payload).encode(), headers=h,
                                  method='GET' if payload is None else 'POST')
     try:
-        with urllib.request.urlopen(req, timeout=15) as r: return json.loads(r.read().decode() or '{}')
+        with urllib.request.urlopen(req, timeout=15) as r: return json.loads(r.read().decode() or '{}')  # nosec B310 - URL selalu https ke Midtrans
     except urllib.error.HTTPError as e:
         log.warning('MIDTRANS HTTP %s %s', e.code, url)
         raise ApiError('Midtrans menolak permintaan. Periksa kunci server dan mode (sandbox/produksi).', 502)

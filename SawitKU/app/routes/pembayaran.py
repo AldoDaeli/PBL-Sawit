@@ -4,7 +4,6 @@ Alur aman: pembeli membayar ke QR/VA Midtrans, lalu WAJIB mengunggah bukti; admi
 sebelum menyetujui. Webhook/cek status Midtrans hanya mencatat status (bahan verifikasi), tidak pernah menyetujui pesanan."""
 import json, logging, secrets
 
-from flask import request
 
 from . import api, ok
 from .. import midtrans
