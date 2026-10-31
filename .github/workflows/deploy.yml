@@ -67,32 +67,36 @@ jobs:
           curl -fsSk -X POST --max-time 60 "${{ secrets.PORTAINER_WEBHOOK_WEB1 }}"
           echo "Webhook web-1 terkirim"
 
-      - name: Health check web-server-1
+      - name: Health check setelah deploy web-server-1
+        env:
+          APP_URL: https://sawitku.pbl-304.my.id/
         run: |
           sleep 15
           for i in $(seq 1 30); do
-            if curl -fsSL -o /dev/null --max-time 5 http://192.168.20.10/; then
-              echo "web-1 sehat"; exit 0
+            if curl -fsSL -o /dev/null --max-time 10 "$APP_URL"; then
+              echo "Situs sehat setelah deploy web-1"; exit 0
             fi
-            echo "Menunggu web-1... ($i/30)"; sleep 5
+            echo "Menunggu situs... ($i/30)"; sleep 5
           done
-          echo "web-1 gagal health check"; exit 1
+          echo "Situs gagal health check setelah deploy web-1"; exit 1
 
       - name: Deploy web-server-2
         run: |
           curl -fsSk -X POST --max-time 60 "${{ secrets.PORTAINER_WEBHOOK_WEB2 }}"
           echo "Webhook web-2 terkirim"
 
-      - name: Health check web-server-2
+      - name: Health check setelah deploy web-server-2
+        env:
+          APP_URL: https://sawitku.pbl-304.my.id/
         run: |
           sleep 15
           for i in $(seq 1 30); do
-            if curl -fsSL -o /dev/null --max-time 5 http://192.168.20.11/; then
-              echo "web-2 sehat"; exit 0
+            if curl -fsSL -o /dev/null --max-time 10 "$APP_URL"; then
+              echo "Situs sehat setelah deploy web-2"; exit 0
             fi
-            echo "Menunggu web-2... ($i/30)"; sleep 5
+            echo "Menunggu situs... ($i/30)"; sleep 5
           done
-          echo "web-2 gagal health check"; exit 1
+          echo "Situs gagal health check setelah deploy web-2"; exit 1
 
       - name: Notif Discord (sukses)
         if: success()
