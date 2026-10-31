@@ -1,0 +1,66 @@
+name: Monitor - Cek web
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # tiap 5 menit (batas minimum GitHub)
+  workflow_dispatch:
+
+concurrency:
+  group: monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  APP_URL: https://sawitku.pbl-304.my.id/
+
+jobs:
+  cek:
+    name: Cek situs
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Cek situs (3 kali coba)
+        id: cek
+        run: |
+          for i in 1 2 3; do
+            code=$(curl -sL -o /dev/null -w '%{http_code}' --max-time 15 "$APP_URL" || true)
+            echo "Percobaan $i: HTTP $code"
+            if [ "$code" -ge 200 ] 2>/dev/null && [ "$code" -lt 400 ]; then
+              echo "up=true"  >> "$GITHUB_OUTPUT"
+              echo "code=$code" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "up=false" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Kirim alert Discord (hanya saat status berubah)
+        env:
+          DISCORD: ${{ secrets.DISCORD_WEBHOOK_MONITOR || secrets.DISCORD_WEBHOOK_DEPLOY }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          UP: ${{ steps.cek.outputs.up }}
+          CODE: ${{ steps.cek.outputs.code }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          prev=$(gh run list --workflow monitor.yml --status completed --limit 1 \
+                   --json conclusion --jq '.[0].conclusion' || true)
+          echo "Status run sebelumnya: ${prev:-tidak ada}"
+          pesan=""
+          if [ "$UP" = "false" ] && [ "$prev" != "failure" ]; then
+            pesan="🔴 SITUS DOWN: ${APP_URL} (HTTP ${CODE}). Cek: ${RUN_URL}"
+          elif [ "$UP" = "true" ] && [ "$prev" = "failure" ]; then
+            pesan="🟢 Situs pulih: ${APP_URL} (HTTP ${CODE})"
+          fi
+          if [ -n "$pesan" ] && [ -n "$DISCORD" ]; then
+            jq -n --arg c "$pesan" '{content:$c}' \
+              | curl -fsS -H "Content-Type: application/json" -d @- "$DISCORD"
+          fi
+
+      - name: Tandai run merah kalau situs down
+        if: steps.cek.outputs.up == 'false'
+        run: exit 1
