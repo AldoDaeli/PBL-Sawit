@@ -1,6 +1,7 @@
 services:
   webapp:
-    image: sawitku:latest
+    image: ghcr.io/aldodaeli/sawitku:latest
+    pull_policy: always
     container_name: webapp
     ports:
       - "80:8000"
