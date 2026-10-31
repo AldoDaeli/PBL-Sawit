@@ -15,6 +15,25 @@ services:
     volumes:
       - uploads:/srv/uploads
     restart: always
+    labels:
+      - autoheal=true
+    healthcheck:
+      # Pakai python karena image berbasis Python (tidak perlu curl)
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  autoheal:
+    image: willfarrer/autoheal:latest
+    container_name: autoheal
+    restart: always
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: 10
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   uploads:
