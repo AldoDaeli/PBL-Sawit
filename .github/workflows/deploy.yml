@@ -64,7 +64,7 @@ jobs:
 
       - name: Deploy web-server-1
         run: |
-          curl -fsSk -X POST --max-time 60 "${{ secrets.PORTAINER_WEBHOOK_WEB1 }}"
+          curl -fsSk -X POST --max-time 300 "${{ secrets.PORTAINER_WEBHOOK_WEB1 }}"
           echo "Webhook web-1 terkirim"
 
       - name: Health check setelah deploy web-server-1
@@ -82,7 +82,7 @@ jobs:
 
       - name: Deploy web-server-2
         run: |
-          curl -fsSk -X POST --max-time 60 "${{ secrets.PORTAINER_WEBHOOK_WEB2 }}"
+          curl -fsSk -X POST --max-time 300 "${{ secrets.PORTAINER_WEBHOOK_WEB2 }}"
           echo "Webhook web-2 terkirim"
 
       - name: Health check setelah deploy web-server-2
