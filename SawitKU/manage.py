@@ -1,5 +1,6 @@
 """Perintah pengelolaan. Jalankan:  python manage.py --help
-   init-db | seed | buat-admin | impor-media"""
+   init-db | seed | buat-admin | impor-media
+Skema database kini dikelola migration:  flask --app main db upgrade   (init-db tetap ada untuk kompatibilitas)"""
 import os, time
 
 import click
@@ -9,7 +10,7 @@ from app.db import connect
 from app.security import hash_pw, now_ms
 from app.validators import username_ok, email_ok, password_ok
 
-TABEL = ['otp_reset', 'ulasan_balas', 'media', 'sesi', 'gagal_login', 'otp_daftar', 'otp_email', 'ulasan', 'favorit', 'keranjang',
+TABEL = ['log_audit', 'otp_reset', 'ulasan_balas', 'media', 'sesi', 'gagal_login', 'otp_daftar', 'otp_email', 'ulasan', 'favorit', 'keranjang',
          'pesanan_item', 'pesanan', 'pesan_kontak', 'chat_pesan', 'produk', 'pengguna']
 # Kolom yang ditambahkan setelah versi awal: database lama dilengkapi otomatis oleh init-db (sudah ada = dilewati)
 KOLOM_PESANAN = ['ditolak INT NOT NULL DEFAULT 0', 'kurir VARCHAR(30) NULL', 'resi VARCHAR(40) NULL', 't_bayar BIGINT NULL', 't_proses BIGINT NULL',
@@ -85,9 +86,16 @@ def buat_admin(username, email):
     if not email_ok(email): raise click.ClickException('Format email tidak valid.')
     pw = click.prompt('Password', hide_input=True, confirmation_prompt=True)
     if not password_ok(pw): raise click.ClickException('Password 8–64 karakter, kombinasi huruf dan angka.')
-    db = connect()
-    db.run('INSERT INTO pengguna (username,email,hash,peran,aktif,dibuat) VALUES (%s,%s,%s,%s,1,%s)', (username, email, hash_pw(pw), 'admin', now_ms()))
-    db.commit(); db.close()
+    from sqlalchemy.exc import IntegrityError
+    from app import create_app
+    from app.extensions import db as orm
+    from app.models import Pengguna
+    with create_app().app_context():                      # ORM SQLAlchemy: model Pengguna + hash password
+        u = Pengguna(username=username, email=email.lower(), peran='admin', aktif=1, dibuat=now_ms()); u.set_password(pw)
+        orm.session.add(u)
+        try: orm.session.commit()
+        except IntegrityError:
+            orm.session.rollback(); raise click.ClickException('Username atau email sudah dipakai.')
     click.echo(f'Admin {username} dibuat.')
 
 
