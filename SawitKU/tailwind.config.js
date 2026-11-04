@@ -1,7 +1,7 @@
 /* Sama dengan frontend/shared/tailwind.js (konfigurasi untuk Tailwind CDN), dipakai oleh build `npm run css`.
    Bila mengubah palet/animasi, ubah di KEDUA berkas agar tampilan CDN dan build tetap sama. */
 module.exports = {
-  content: ['./frontend/**/*.{html,js}'],
+  content: ['./app/templates/**/*.html', './frontend/**/*.js'],
   theme: { extend: {
     fontFamily: { sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'], display: ['"Bricolage Grotesque"', '"Plus Jakarta Sans"', 'system-ui', 'sans-serif'] },
     colors: { brand: { 50:'#f0f9f2',100:'#dcf1e1',200:'#bbe3c6',300:'#8ccda2',400:'#5ab37c',500:'#38995e',600:'#297b4a',700:'#22623d',800:'#1e4e33',900:'#173f2a' },
