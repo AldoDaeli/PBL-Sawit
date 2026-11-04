@@ -3,7 +3,7 @@ import logging, re
 from flask import request
 
 from . import api, ok
-from .. import midtrans
+from .. import aktivitas, midtrans
 from ..config import cfg
 from ..db import get_db
 from ..errors import ApiError
@@ -50,6 +50,8 @@ def checkout(u):
         _, n = db.run('UPDATE produk SET stok = stok - %s WHERE id=%s AND stok >= %s', (r['qty'], r['id'], r['qty']))
         if n != 1: raise ApiError(f"Stok {r['nama']} tidak mencukupi.", 409)   # galat -> seluruh transaksi di-rollback
     db.run('DELETE FROM keranjang WHERE user_id=%s', (uid,))
+    aktivitas.catat(db, 'pesanan.buat', u, f'pesanan#{oid}', {'total': total, 'metode': b.metode, 'kota': tujuan['kota'], 'simpan_alamat': b.simpan is True,
+                                                          'item': [{'produk': r['nama'], 'qty': r['qty'], 'harga': r['harga']} for r in rows]})
     return ok(muat_pesanan(db, [db.one('SELECT * FROM pesanan WHERE id=%s', (oid,))])[0])
 
 
@@ -82,6 +84,7 @@ def batal(u, oid):
     db = get_db(); o = milik(db, oid, u['id'])
     if o['status'] != 'menunggu_bayar': raise ApiError('Pesanan tidak dapat dibatalkan.', 409)
     batalkan(db, o, 'Dibatalkan oleh pembeli.')
+    aktivitas.catat(db, 'pesanan.batal', u, f'pesanan#{oid}', {'total': o['total'], 'tagihan_midtrans_dibatalkan': bool(o['midtrans_id'])})
     db.commit()
     if o['midtrans_id'] and midtrans.aktif(): midtrans.batalkan(o['midtrans_id'])    # tagihan di Midtrans ikut dibatalkan
     return ok()
@@ -97,6 +100,7 @@ def terima(u, oid):
     if o['status'] != 'dikirim': raise ApiError('Pesanan belum dikirim.', 409)
     foto = simpan_data_url(b.foto, 'terima') if b is not None and b.foto else None
     db.run('UPDATE pesanan SET status=%s, t_selesai=%s, foto_terima=%s WHERE id=%s', ('selesai', now_ms(), foto, oid))
+    aktivitas.catat(db, 'pesanan.terima', u, f'pesanan#{oid}', {'dengan_foto': bool(foto), 'total': o['total']})
     return ok()
 
 
@@ -140,7 +144,7 @@ def admin_pesanan(_):
 
 @api.post('/admin/pesanan/<int:oid>/verifikasi', tags=['Admin'], summary='Setujui / tolak bukti pembayaran')
 @admin_saja
-def verifikasi(_, oid):
+def verifikasi(adm, oid):
     b = badan(VerifikasiIn)
     db = get_db()
     o = db.one('SELECT * FROM pesanan WHERE id=%s FOR UPDATE', (oid,))
@@ -153,18 +157,21 @@ def verifikasi(_, oid):
                     db.run('UPDATE pesanan SET midtrans_status=%s WHERE id=%s', (str(d['transaction_status'])[:20], o['id']))
             except Exception: pass                       # gagal cek tidak menghalangi persetujuan; admin bisa klik "Cek status"
         lunas(db, o)
+        st = db.one('SELECT midtrans_status FROM pesanan WHERE id=%s', (oid,))['midtrans_status']
+        aktivitas.catat(db, 'pesanan.verifikasi_setuju', adm, f'pesanan#{oid}', {'total': o['total'], 'pembeli_id': o['user_id'], 'status_midtrans': st or '-', 'metode': o['metode']})
     else:
         # Ditolak: pesanan TIDAK dibatalkan. Kembali ke 'menunggu_bayar' dengan alasan, supaya pembeli bisa mengunggah ulang bukti.
         alasan = (str(b.alasan or '').strip()[:200]) or 'Bukti pembayaran tidak sesuai.'
         db.run('UPDATE pesanan SET status=%s, alasan=%s, ditolak=ditolak+1, bukti=NULL, t_bayar=NULL, batas_bayar=%s WHERE id=%s',
                ('menunggu_bayar', alasan, now_ms() + cfg['BATAS_BAYAR_JAM'] * 3600000, oid))
+        aktivitas.catat(db, 'pesanan.verifikasi_tolak', adm, f'pesanan#{oid}', {'total': o['total'], 'pembeli_id': o['user_id'], 'alasan': alasan})
         db.commit(); hapus_media(o['bukti'], db)
     return ok()
 
 
 @api.post('/admin/pesanan/<int:oid>/kirim', tags=['Admin'], summary='Tandai dikirim (kurir + resi)')
 @admin_saja
-def kirim_pesanan(_, oid):
+def kirim_pesanan(adm, oid):
     b = badan(KirimIn)
     db = get_db()
     kurir, resi = str(b.kurir or '').strip()[:30], re.sub(r'\s', '', str(b.resi or '')).upper()
@@ -174,16 +181,18 @@ def kirim_pesanan(_, oid):
     if not o or o['status'] != 'diproses': raise ApiError('Pesanan belum siap dikirim.', 409)
     if db.one('SELECT 1 AS x FROM pesanan WHERE resi=%s AND id<>%s', (resi, oid)): raise ApiError('Nomor resi itu sudah dipakai pesanan lain.', 409)
     db.run('UPDATE pesanan SET status=%s, kurir=%s, resi=%s, t_kirim=%s WHERE id=%s', ('dikirim', kurir, resi, now_ms(), oid))
+    aktivitas.catat(db, 'pesanan.kirim', adm, f'pesanan#{oid}', {'kurir': kurir, 'resi': resi})
     return ok()
 
 
 @api.post('/admin/pesanan/<int:oid>/sampai', tags=['Admin'], summary='Tandai barang sudah tiba/diantar ke pembeli')
 @admin_saja
-def tandai_sampai(_, oid):
+def tandai_sampai(adm, oid):
     """Memulai hitung mundur AUTO_TERIMA_JAM: tanpa konfirmasi pembeli, pesanan selesai otomatis."""
     db = get_db()
     o = db.one('SELECT status, t_sampai FROM pesanan WHERE id=%s FOR UPDATE', (oid,))
     if not o or o['status'] != 'dikirim': raise ApiError('Pesanan belum dalam pengiriman.', 409)
     if o['t_sampai']: raise ApiError('Pesanan sudah ditandai tiba.', 409)
     db.run('UPDATE pesanan SET t_sampai=%s WHERE id=%s', (now_ms(), oid))
+    aktivitas.catat(db, 'pesanan.sampai', adm, f'pesanan#{oid}', {'auto_selesai_jam': cfg['AUTO_TERIMA_JAM']})
     return ok()
