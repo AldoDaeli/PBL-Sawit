@@ -1,4 +1,7 @@
 Flask>=3.0         # framework web (membawa Werkzeug dan click)
+Flask-SQLAlchemy>=3.1   # ORM (model di app/models.py)
+SQLAlchemy>=2.0
+Flask-Migrate>=4.0      # migration database (Alembic) -> folder migrations/
 PyMySQL>=1.1
 Pillow>=10.0
 python-dotenv>=1.0
