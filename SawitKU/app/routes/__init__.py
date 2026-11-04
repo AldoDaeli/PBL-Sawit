@@ -4,9 +4,9 @@ Opsi tambahan pada dekorator rute (`@api.post('/x', status_code=201, tags=['Akun
 status respons dan halaman dokumentasi `/api/docs`; Flask sendiri tidak melihatnya."""
 from functools import wraps
 
-from flask import Blueprint
+from flask import Blueprint, request
 
-from .. import db as basis
+from .. import aktivitas, db as basis
 
 DAFTAR = []          # metadata semua endpoint, dipakai app/docs.py
 
@@ -19,6 +19,8 @@ def transaksi(fn):
         try: hasil = fn(*a, **k)
         except BaseException:
             basis.batal(); raise
+        if request.method != 'GET' and not basis.konteks().tercatat:       # jaring pengaman log aktivitas (lihat app/aktivitas.py)
+            aktivitas.catat_umum(basis.get_db())
         basis.simpan(); return hasil
     return bungkus
 
