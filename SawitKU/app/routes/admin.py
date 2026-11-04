@@ -1,15 +1,18 @@
 """Fitur khusus admin: produk, pengguna, ulasan, pesan kontak. (Pesanan admin ada di pesanan.py.)"""
 import json
 
+from flask import request
 
 from . import api, ok
+from .. import aktivitas
 from ..config import KATEGORI
 from ..db import get_db
 from ..errors import ApiError
 from ..schemas import badan, ProdukIn, TeksIn
 from ..security import now_ms, wajib
 from ..serializers import user_out, produk_out, ulasan_out
-from ..services import PRODUK_SQL, lanjutan_ulasan
+from ..produk_service import ProdukService
+from ..services import lanjutan_ulasan
 from ..uploads import resolve_gambar, hapus_media
 from ..validators import to_int
 
@@ -46,42 +49,54 @@ def _data_produk(b):
 
 @api.post('/admin/produk', status_code=201, tags=['Admin'])
 @admin_saja
-def produk_buat(_):
+def produk_buat(adm):
     b = badan(ProdukIn)
     db = get_db()
     d = _data_produk(b.data())
     if not b.gambar: raise ApiError('Foto produk wajib (URL https atau unggah gambar).')
     d['gambar'] = resolve_gambar(b.gambar, 'produk')
-    pid, _ = db.run('INSERT INTO produk (nama,kategori,harga,stok,terjual,rating,best_seller,gambar,deskripsi,spesifikasi,dibuat) '
-                    'VALUES (%s,%s,%s,%s,0,0,%s,%s,%s,%s,%s)',
-                    (d['nama'], d['kategori'], d['harga'], d['stok'], d['best_seller'], d['gambar'], d['deskripsi'], d['spesifikasi'], now_ms()))
-    return ok(produk_out(db.one(PRODUK_SQL + ' WHERE p.id=%s', (pid,))))
+    db.commit()                                         # lepas transaksi koneksi mentah (sesi) sebelum sesi ORM menulis
+    p = ProdukService.buat(d, now_ms())                 # INSERT lewat ORM
+    aktivitas.catat(db, 'produk.tambah', adm, f'produk#{p.id}', {'nama': d['nama'], 'kategori': d['kategori'], 'harga': d['harga'], 'stok': d['stok'],
+                                                            'best_seller': bool(d['best_seller']), 'deskripsi': aktivitas.ringkas(d['deskripsi'], 100)})
+    return ok(produk_out(ProdukService.baris(p.id)))
 
 
 @api.put('/admin/produk/<int:pid>', tags=['Admin'])
 @admin_saja
-def produk_ubah(_, pid):
+def produk_ubah(adm, pid):
     b = badan(ProdukIn)
     db = get_db()
-    lama = db.one('SELECT * FROM produk WHERE id=%s FOR UPDATE', (pid,))
-    if not lama: raise ApiError('Produk tidak ditemukan.', 404)
+    db.commit()
+    p = ProdukService.ambil(pid, kunci=True)
+    if not p: raise ApiError('Produk tidak ditemukan.', 404)
+    lama = {k: getattr(p, k) for k in p.KOLOM}          # salinan nilai lama untuk jejak audit
     d = _data_produk(b.data())
     d['gambar'] = resolve_gambar(b.gambar, 'produk', saat_ini=lama['gambar']) if b.gambar else lama['gambar']
-    db.run('UPDATE produk SET nama=%s,kategori=%s,harga=%s,stok=%s,best_seller=%s,gambar=%s,deskripsi=%s,spesifikasi=%s WHERE id=%s',
-           (d['nama'], d['kategori'], d['harga'], d['stok'], d['best_seller'], d['gambar'], d['deskripsi'], d['spesifikasi'], pid))
+    db.commit()                                         # resolve_gambar menulis tabel media lewat koneksi mentah: commit dulu agar tidak mengunci sesi ORM
+    ProdukService.ubah(p, d)                            # UPDATE lewat ORM
+    jejak = {}
+    for k in ('nama', 'kategori', 'harga', 'stok', 'deskripsi', 'spesifikasi'):
+        if lama[k] != d[k]: jejak[k] = [aktivitas.ringkas(str(lama[k]), 100), aktivitas.ringkas(str(d[k]), 100)] if k in ('deskripsi', 'spesifikasi') else [lama[k], d[k]]
+    if bool(lama['best_seller']) != bool(d['best_seller']): jejak['best_seller'] = [bool(lama['best_seller']), bool(d['best_seller'])]
+    if d['gambar'] != lama['gambar']: jejak['gambar'] = 'diganti'
+    aktivitas.catat(db, 'produk.ubah', adm, f'produk#{pid}', {'nama': lama['nama'], 'perubahan': jejak or 'tidak ada perubahan'})
     if d['gambar'] != lama['gambar']:
         db.commit(); hapus_media(lama['gambar'], db)
-    return ok(produk_out(db.one(PRODUK_SQL + ' WHERE p.id=%s', (pid,))))
+    return ok(produk_out(ProdukService.baris(pid)))
 
 
 @api.delete('/admin/produk/<int:pid>', tags=['Admin'])
 @admin_saja
-def produk_hapus(_, pid):
+def produk_hapus(adm, pid):
     db = get_db()
-    p = db.one('SELECT gambar FROM produk WHERE id=%s', (pid,))
+    db.commit()
+    p = ProdukService.ambil(pid)
     if not p: raise ApiError('Produk tidak ditemukan.', 404)
-    db.run('DELETE FROM produk WHERE id=%s', (pid,))   # keranjang/favorit/ulasan ikut terhapus; riwayat pesanan tetap (salinan item)
-    db.commit(); hapus_media(p['gambar'], db)
+    ringkas = {'nama': p.nama, 'kategori': p.kategori, 'harga': p.harga, 'stok_terakhir': p.stok}; gambar = p.gambar
+    ProdukService.hapus(p)                              # DELETE lewat ORM; keranjang/favorit/ulasan ikut terhapus (FK CASCADE)
+    aktivitas.catat(db, 'produk.hapus', adm, f'produk#{pid}', ringkas)
+    db.commit(); hapus_media(gambar, db)
     return ok()
 
 
@@ -94,13 +109,15 @@ def pengguna_all(_):
 
 @api.post('/admin/pengguna/<int:uid>/toggle', tags=['Admin'])
 @admin_saja
-def pengguna_toggle(_, uid):
+def pengguna_toggle(adm, uid):
     db = get_db()
-    u = db.one('SELECT id, aktif FROM pengguna WHERE id=%s AND peran=%s FOR UPDATE', (uid, 'customer'))
+    u = db.one('SELECT id, username, aktif FROM pengguna WHERE id=%s AND peran=%s FOR UPDATE', (uid, 'customer'))
     if not u: raise ApiError('Akun tidak dapat diubah.', 404)
     baru = 0 if u['aktif'] else 1
     db.run('UPDATE pengguna SET aktif=%s WHERE id=%s', (baru, uid))
     if not baru: db.run('DELETE FROM sesi WHERE user_id=%s', (uid,))     # akun dinonaktifkan -> langsung keluar
+    aktivitas.catat(db, 'pengguna.aktifkan' if baru else 'pengguna.nonaktifkan', adm, f'pengguna#{uid}',
+                    {'username': u['username'], 'sesi_dicabut': not baru})
     return ok({'aktif': bool(baru)})
 
 
@@ -122,7 +139,7 @@ def ulasan_balas(a, rid):
     b = badan(TeksIn)
     db = get_db()
     teks = str(b.teks or '').strip()
-    r = db.one('SELECT id, balasan_teks FROM ulasan WHERE id=%s FOR UPDATE', (rid,))
+    r = db.one('SELECT id, user_id, produk_id, balasan_teks FROM ulasan WHERE id=%s FOR UPDATE', (rid,))
     if not r: raise ApiError('Ulasan tidak ditemukan.', 404)
     if not 3 <= len(teks) <= 300: raise ApiError('Komentar 3–300 karakter.')
     lanj = db.all('SELECT dari FROM ulasan_balas WHERE ulasan_id=%s ORDER BY id', (rid,))
@@ -132,6 +149,8 @@ def ulasan_balas(a, rid):
         db.run('INSERT INTO ulasan_balas (ulasan_id,dari,user_id,teks,dibuat) VALUES (%s,%s,%s,%s,%s)', (rid, 'admin', a['id'], teks, now_ms()))
     else:
         raise ApiError('Tunggu pelanggan membalas dulu.', 409)
+    aktivitas.catat(db, 'ulasan.balas_admin', a, f'ulasan#{rid}', {'pelanggan_id': r['user_id'], 'produk_id': r['produk_id'], 'isi': aktivitas.ringkas(teks, 100),
+                                                              'ubah_balasan': bool(not lanj and r['balasan_teks']), 'panjang': len(teks)})
     return ok()
 
 
@@ -139,3 +158,40 @@ def ulasan_balas(a, rid):
 @admin_saja
 def pesan_kontak(_):
     return ok(get_db().all('SELECT id, nama, email, jenis, isi, dibuat FROM pesan_kontak ORDER BY dibuat DESC'))
+
+
+def _angka(v):
+    """Parameter query opsional: bilangan bulat, atau None bila kosong/tidak valid (filter diabaikan)."""
+    try: return int(v)
+    except (TypeError, ValueError): return None
+
+
+@api.get('/admin/log', tags=['Admin'], summary='Log audit seluruh aktivitas')
+@admin_saja
+def log_audit(_):
+    """Filter (semua opsional): aksi (kode persis, mis. produk.hapus), kategori (auth, produk, pesanan, ...), peran (admin|customer|tamu|sistem),
+    q (username / IP / target / isi detail), dari & sampai (ms epoch), hal, per (maks 200). Terbaru dulu.
+    Respons: {total, hal, per, items: [{..., detail: {...}}]}."""
+    a, db = request.args, get_db()
+    syarat, arg = [], []
+    for kolom in ('aksi', 'kategori', 'peran'):
+        v = (a.get(kolom) or '').strip()[:40]
+        if v: syarat.append(kolom + '=%s'); arg.append(v)
+    q = (a.get('q') or '').strip()[:60]
+    if q: syarat.append('(username LIKE %s OR ip LIKE %s OR target LIKE %s OR detail LIKE %s)'); arg += ['%' + q + '%'] * 4
+    dari, sampai = _angka(a.get('dari')), _angka(a.get('sampai'))
+    if dari is not None: syarat.append('waktu>=%s'); arg.append(dari)
+    if sampai is not None: syarat.append('waktu<=%s'); arg.append(sampai)
+    where = (' WHERE ' + ' AND '.join(syarat)) if syarat else ''
+    per = min(max(_angka(a.get('per')) or 50, 1), 200); hal = max(_angka(a.get('hal')) or 1, 1)
+    total = db.one('SELECT COUNT(*) AS n FROM log_audit' + where, tuple(arg))['n']
+    rows = db.all('SELECT id, user_id, username, peran, aksi, kategori, target, detail, ip, perangkat, waktu FROM log_audit' + where +
+                  ' ORDER BY waktu DESC, id DESC LIMIT %s OFFSET %s', tuple(arg) + (per, (hal - 1) * per))
+
+    def detail(t):
+        try: return json.loads(t) if t else {}
+        except ValueError: return {'mentah': t}
+    return ok({'total': total, 'hal': hal, 'per': per,
+               'items': [{'id': r['id'], 'userId': r['user_id'], 'username': r['username'], 'peran': r['peran'], 'aksi': r['aksi'],
+                          'kategori': r['kategori'], 'target': r['target'], 'detail': detail(r['detail']),
+                          'ip': r['ip'], 'perangkat': r['perangkat'], 'waktu': r['waktu']} for r in rows]})
