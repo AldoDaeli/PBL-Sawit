@@ -3,6 +3,7 @@
 from flask import request
 
 from . import api, ok
+from .. import aktivitas
 from ..config import cfg
 from ..db import get_db
 from ..errors import ApiError
@@ -68,7 +69,9 @@ def chat_kirim(u):
                "COALESCE((SELECT MAX(id) FROM chat_pesan WHERE user_id=%s AND dari='admin'), 0)", (uid, uid))
     if r['n'] >= c['CHAT_MAKS_BERUNTUN']:
         raise ApiError('Admin belum membalas. Tunggu balasan sebelum mengirim pesan lagi.', 429)
-    return ok(_simpan(db, uid, 'customer', isi))
+    pesan = _simpan(db, uid, 'customer', isi)
+    aktivitas.catat(db, 'chat.kirim_customer', u, f'pengguna#{uid}', {'panjang': len(isi)})     # isi chat pelanggan tidak disalin ke log
+    return ok(pesan)
 
 
 # ---------------- Admin ----------------
@@ -116,4 +119,7 @@ def admin_chat_balas(adm, uid):
     if not db.one('SELECT id FROM chat_pesan WHERE user_id=%s LIMIT 1', (uid,)):
         raise ApiError('Percakapan belum dimulai oleh pelanggan.', 404)       # admin hanya membalas, tidak memulai chat
     if not u['aktif']: raise ApiError('Akun pelanggan dinonaktifkan.', 409)
-    return ok(_simpan(db, uid, 'admin', bersihkan_chat(b.isi), adm['id']))
+    isi = bersihkan_chat(b.isi)
+    pesan = _simpan(db, uid, 'admin', isi, adm['id'])
+    aktivitas.catat(db, 'chat.balas_admin', adm, f'pengguna#{uid}', {'pelanggan': u['username'], 'isi': aktivitas.ringkas(isi, 100), 'panjang': len(isi)})
+    return ok(pesan)
