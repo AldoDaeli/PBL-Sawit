@@ -1,4 +1,5 @@
 """Logika bisnis bersama: pembatalan pesanan, sapu pesanan kedaluwarsa, muat item, hitung ulang rating."""
+from . import aktivitas
 from .config import cfg
 from .security import now_ms
 from .serializers import pesanan_out
@@ -43,10 +44,14 @@ def sapu(db, paksa=False):
     _terakhir = now
     for o in db.all('SELECT * FROM pesanan WHERE status=%s AND batas_bayar<%s FOR UPDATE', ('menunggu_bayar', now)):
         batalkan(db, o, 'Melewati batas waktu pembayaran.')
+        aktivitas.catat(db, 'pesanan.batal_otomatis', None, f"pesanan#{o['id']}", {'alasan': 'melewati batas bayar', 'total': o['total']}, peran='sistem')
     jeda = cfg['AUTO_TERIMA_JAM'] * 3600000
+    otomatis = db.all('SELECT id FROM pesanan WHERE status=%s AND t_sampai IS NOT NULL AND t_sampai<%s', ('dikirim', now - jeda))
     db.run('UPDATE pesanan SET status=%s, otomatis=1, t_selesai=t_sampai + %s WHERE status=%s AND t_sampai IS NOT NULL AND t_sampai<%s',
            ('selesai', jeda, 'dikirim', now - jeda))
+    for r in otomatis: aktivitas.catat(db, 'pesanan.selesai_otomatis', None, f"pesanan#{r['id']}", {'alasan': 'tidak dikonfirmasi pembeli'}, peran='sistem')
     db.run('DELETE FROM sesi WHERE kedaluwarsa<%s', (now,))
+    if cfg['LOG_HARI'] > 0: db.run('DELETE FROM log_audit WHERE waktu<%s', (now - cfg['LOG_HARI'] * 86_400_000,))
     db.commit()   # simpan sekarang: pembatalan otomatis tidak boleh ikut ter-rollback bila request ini berakhir dengan galat
 
 
