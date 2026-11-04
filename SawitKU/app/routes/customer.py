@@ -3,14 +3,14 @@ import logging, re, secrets
 
 
 from . import api, ok
-from .. import otp
+from .. import aktivitas, otp
 from ..config import cfg
 from ..db import get_db, IntegrityErrors
 from ..errors import ApiError
 from ..schemas import badan, KeranjangIn, QtyIn, UlasanIn, TeksIn, ProfilIn, EmailMintaIn, KodeSajaIn
 from ..security import now_ms, wajib, cek_pw, batasi_laju, sisa_blokir, catat_gagal, reset_gagal, ip_klien
 from ..serializers import user_out, produk_out
-from ..services import hitung_rating
+from ..services import PRODUK_SQL, hitung_rating
 from ..uploads import resolve_gambar, hapus_media
 from ..validators import username_ok, email_ok, to_int, baca_alamat
 
@@ -29,10 +29,13 @@ def favorit(u):
 @pelanggan
 def fav_toggle(u, pid):
     db, uid = get_db(), u['id']
-    if not db.one('SELECT id FROM produk WHERE id=%s', (pid,)): raise ApiError('Produk tidak ditemukan.', 404)
+    p = db.one('SELECT id, nama FROM produk WHERE id=%s', (pid,))
+    if not p: raise ApiError('Produk tidak ditemukan.', 404)
     if db.one('SELECT 1 AS x FROM favorit WHERE user_id=%s AND produk_id=%s', (uid, pid)):
-        db.run('DELETE FROM favorit WHERE user_id=%s AND produk_id=%s', (uid, pid)); return ok({'aktif': False})
-    db.run('INSERT INTO favorit (user_id,produk_id) VALUES (%s,%s)', (uid, pid)); return ok({'aktif': True})
+        db.run('DELETE FROM favorit WHERE user_id=%s AND produk_id=%s', (uid, pid))
+        aktivitas.catat(db, 'favorit.hapus', u, f'produk#{pid}', {'produk': p['nama']}); return ok({'aktif': False})
+    db.run('INSERT INTO favorit (user_id,produk_id) VALUES (%s,%s)', (uid, pid))
+    aktivitas.catat(db, 'favorit.tambah', u, f'produk#{pid}', {'produk': p['nama']}); return ok({'aktif': True})
 
 
 # ---------------- Keranjang ----------------
@@ -49,13 +52,14 @@ def ker_add(u):
     b = badan(KeranjangIn)
     db, uid = get_db(), u['id']
     pid, qty = to_int(b.produkId, 'Data produk tidak valid.'), to_int(b.qty, 'Data produk tidak valid.')
-    p = db.one('SELECT id, stok FROM produk WHERE id=%s', (pid,))
+    p = db.one('SELECT id, nama, stok FROM produk WHERE id=%s', (pid,))
     if not p or qty <= 0: raise ApiError('Data produk tidak valid.')
     c = db.one('SELECT qty FROM keranjang WHERE user_id=%s AND produk_id=%s', (uid, pid))
     n = (c['qty'] if c else 0) + qty
     if n > p['stok']: raise ApiError(f"Stok hanya tersisa {p['stok']}.", 409)
     if c: db.run('UPDATE keranjang SET qty=%s WHERE user_id=%s AND produk_id=%s', (n, uid, pid))
     else: db.run('INSERT INTO keranjang (user_id,produk_id,qty) VALUES (%s,%s,%s)', (uid, pid, n))
+    aktivitas.catat(db, 'keranjang.tambah', u, f'produk#{pid}', {'produk': p['nama'], 'ditambah': qty, 'qty_di_keranjang': n})
     return ok()
 
 
@@ -65,18 +69,21 @@ def ker_set(u, pid):
     b = badan(QtyIn)
     db, uid = get_db(), u['id']
     qty = to_int(b.qty, 'Jumlah tidak valid.')
-    p = db.one('SELECT stok FROM produk WHERE id=%s', (pid,))
+    p = db.one('SELECT nama, stok FROM produk WHERE id=%s', (pid,))
     if not p or qty < 1 or qty > p['stok']: raise ApiError(f"Jumlah harus 1–{p['stok'] if p else 0}.")
     _, n = db.run('UPDATE keranjang SET qty=%s WHERE user_id=%s AND produk_id=%s', (qty, uid, pid))
     if not n and not db.one('SELECT 1 AS x FROM keranjang WHERE user_id=%s AND produk_id=%s', (uid, pid)):
         raise ApiError('Produk tidak ada di keranjang.', 404)
+    aktivitas.catat(db, 'keranjang.ubah', u, f'produk#{pid}', {'produk': p['nama'], 'qty': qty})
     return ok()
 
 
 @api.delete('/keranjang/<int:pid>', tags=['Belanja'])
 @pelanggan
 def ker_hapus(u, pid):
-    get_db().run('DELETE FROM keranjang WHERE user_id=%s AND produk_id=%s', (u['id'], pid))
+    db = get_db()
+    db.run('DELETE FROM keranjang WHERE user_id=%s AND produk_id=%s', (u['id'], pid))
+    aktivitas.catat(db, 'keranjang.hapus', u, f'produk#{pid}')
     return ok()
 
 
@@ -101,6 +108,7 @@ def kirim_ulasan(u):
     except IntegrityErrors:
         raise ApiError('Kamu sudah mengulas produk ini.', 409)
     hitung_rating(db, pid)
+    aktivitas.catat(db, 'ulasan.kirim', u, f'produk#{pid}', {'rating': rating, 'teks': aktivitas.ringkas(teks, 120)})
     return ok()
 
 
@@ -119,6 +127,7 @@ def balas_ulasan(u, rid):
     if lanj and lanj[-1]['dari'] == 'customer': raise ApiError('Tunggu balasan admin dulu.', 409)
     if sum(1 for x in lanj if x['dari'] == 'customer') >= 5: raise ApiError('Batas balasan untuk ulasan ini sudah tercapai.', 409)
     db.run('INSERT INTO ulasan_balas (ulasan_id,dari,user_id,teks,dibuat) VALUES (%s,%s,%s,%s,%s)', (rid, 'customer', uid, teks, now_ms()))
+    aktivitas.catat(db, 'ulasan.balas_customer', u, f'ulasan#{rid}', {'teks': aktivitas.ringkas(teks, 120)})
     return ok()
 
 
@@ -143,6 +152,8 @@ def profil(u):
     if db.one('SELECT id FROM pengguna WHERE id<>%s AND LOWER(username)=LOWER(%s)', (u['id'], username)): raise ApiError('Username sudah dipakai.', 409)
     if db.one('SELECT id FROM pengguna WHERE id<>%s AND LOWER(email)=LOWER(%s)', (u['id'], email)): raise ApiError('Email sudah terdaftar.', 409)
     path_foto = u['foto']
+    jejak = {}                                            # ringkasan perubahan untuk log (nilai pribadi tidak disalin utuh)
+    if username != u['username']: jejak['username'] = [u['username'], username]
     if foto:   # hanya unggahan baru (atau foto sendiri yang tak berubah); URL eksternal ditolak: pelacakan IP admin & kolom DB 255
         path_foto = resolve_gambar(foto, 'foto', saat_ini=u['foto'], boleh_url=False)
     db.run('UPDATE pengguna SET username=%s, email=%s, foto=%s WHERE id=%s', (username, email, path_foto, u['id']))
@@ -151,8 +162,13 @@ def profil(u):
         if any(isi):
             a = baca_alamat(b.data(), perlu_penerima=False)
             db.run('UPDATE pengguna SET telepon=%s, alamat=%s, kota=%s, kode_pos=%s WHERE id=%s', (a['telepon'], a['alamat'], a['kota'], a['kode_pos'], u['id']))
+            if (a['telepon'], a['alamat'], a['kota'], a['kode_pos']) != (u['telepon'], u['alamat'], u['kota'], u['kode_pos']):
+                jejak['alamat'] = 'diubah'; jejak['kota'] = a['kota']
         else:
             db.run('UPDATE pengguna SET telepon=NULL, alamat=NULL, kota=NULL, kode_pos=NULL WHERE id=%s', (u['id'],))
+            if u['alamat']: jejak['alamat'] = 'dihapus'
+    if path_foto != u['foto']: jejak['foto'] = 'diganti'
+    aktivitas.catat(db, 'profil.ubah', u, f"pengguna#{u['id']}", jejak or {'perubahan': 'tidak ada'})
     if path_foto != u['foto']:
         db.commit(); hapus_media(u['foto'], db)     # hapus berkas lama hanya setelah basis data tersimpan
     return ok(user_out(db.one('SELECT * FROM pengguna WHERE id=%s', (u['id'],))))
@@ -170,7 +186,9 @@ def email_minta(u):
     sisa = sisa_blokir(db, kunci)
     if sisa: raise ApiError(f'Terlalu banyak percobaan. Coba lagi {sisa} menit lagi.', 429)
     if not cek_pw(u['hash'], str(b.password or '')[:200]):
-        catat_gagal(db, kunci); db.commit()
+        catat_gagal(db, kunci)
+        aktivitas.catat(db, 'profil.password_salah', u, f"pengguna#{u['id']}", {'untuk': 'ganti_email'})
+        db.commit()
         raise ApiError('Password saat ini salah.', 403)          # 403 (bukan 401) agar frontend tidak mengira sesi berakhir
     reset_gagal(db, kunci)
     email = str(b.email or '').strip().lower()[:100]
@@ -186,6 +204,7 @@ def email_minta(u):
     nilai = (email, otp.hash_kode(email, kode, garam), garam, now + cfg['OTP_MENIT'] * 60000, n + 1, now)
     if p: db.run('UPDATE otp_email SET email=%s, kode_hash=%s, garam=%s, kedaluwarsa=%s, salah=0, kirim_n=%s, kirim_terakhir=%s WHERE user_id=%s', nilai + (u['id'],))
     else: db.run('INSERT INTO otp_email (email,kode_hash,garam,kedaluwarsa,salah,kirim_n,kirim_terakhir,user_id) VALUES (%s,%s,%s,%s,0,%s,%s,%s)', nilai + (u['id'],))
+    aktivitas.catat(db, 'profil.email_minta', u, f"pengguna#{u['id']}", {'email_lama': u['email'], 'email_baru': email})
     otp.kirim_kode(email, u['username'], kode, perihal='penggantian email')
     return ok({'email': email, 'berlaku': cfg['OTP_MENIT'], 'jeda': cfg['OTP_JEDA_DETIK']})
 
@@ -205,12 +224,14 @@ def email_verifikasi(u):
     if p['salah'] >= cfg['OTP_MAKS_SALAH']: raise ApiError('Terlalu banyak kode salah. Minta kode baru.', 429)
     if not otp.cocok(otp.hash_kode(p['email'], kode, p['garam']), p['kode_hash']):
         log.warning('OTP EMAIL SALAH user_id=%s ip=%s', u['id'], ip_klien())
+        aktivitas.catat(db, 'auth.otp_salah', u, f"pengguna#{u['id']}", {'tujuan': 'ganti_email', 'email_baru': p['email']})
         db.run('UPDATE otp_email SET salah=salah+1 WHERE user_id=%s', (u['id'],)); db.commit()
         sisa = cfg['OTP_MAKS_SALAH'] - p['salah'] - 1
         raise ApiError(f'Kode OTP salah. Sisa percobaan: {sisa}.' if sisa > 0 else 'Kode OTP salah. Minta kode baru.', 400)
     if db.one('SELECT id FROM pengguna WHERE id<>%s AND LOWER(email)=LOWER(%s)', (u['id'], p['email'])): raise ApiError('Email sudah terdaftar.', 409)
     db.run('UPDATE pengguna SET email=%s WHERE id=%s', (p['email'], u['id']))
     db.run('DELETE FROM otp_email WHERE user_id=%s', (u['id'],))
+    aktivitas.catat(db, 'profil.email_ganti', u, f"pengguna#{u['id']}", {'email_lama': u['email'], 'email_baru': p['email']})
     db.commit()
     otp.kirim_info_email_diganti(u['email'], u['username'], p['email'])
     return ok(user_out(db.one('SELECT * FROM pengguna WHERE id=%s', (u['id'],))))
