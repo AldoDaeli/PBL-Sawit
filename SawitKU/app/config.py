@@ -1,12 +1,17 @@
 """Konfigurasi aplikasi. Nilai dibaca dari .env (python-dotenv); tanpa .env dipakai nilai bawaan.
 `cfg` adalah dict tunggal yang dipakai seluruh aplikasi; `muat()` mengisinya ulang (dipakai `create_app` dan tes)."""
 import os
+from urllib.parse import quote_plus
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
 AKAR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 KATEGORI = ['Tanaman Hias Daun', 'Tanaman Berbunga', 'Sukulen & Kaktus', 'Tanaman Gantung', 'Pot & Media Tanam', 'Perawatan']
+JENIS_KONTAK = ('Pertanyaan', 'Keluhan', 'Kerja sama')
+# (nilai 'min-maks' dalam Rupiah, label) untuk filter harga di katalog; dirender lewat template Jinja
+RENTANG_HARGA = (('0-50000', 'Di bawah Rp50 rb'), ('50000-100000', 'Rp50 rb – 100 rb'), ('100000-200000', 'Rp100 rb – 200 rb'), ('200000-99999999', 'Di atas Rp200 rb'))
 
 
 def _int(k, d): return int(os.getenv(k, d))
@@ -14,7 +19,18 @@ def _bool(k): return os.getenv(k, '0').strip() == '1'
 def _teks(k, d=''): return os.getenv(k, d).strip()
 
 
+def _uri_db(host, port, user, pw, nama):
+    """URI SQLAlchemy. DATABASE_URL (bila diisi) menang; bawaannya MariaDB lewat PyMySQL dari DB_*."""
+    return os.getenv('DATABASE_URL', '').strip() or f'mysql+pymysql://{quote_plus(user)}:{quote_plus(pw)}@{host}:{port}/{nama}?charset=utf8mb4'
+
+
 def _dasar():
+    d = _dasar_tanpa_uri()
+    d['SQLALCHEMY_DATABASE_URI'] = _uri_db(d['DB_HOST'], d['DB_PORT'], d['DB_USER'], d['DB_PASSWORD'], d['DB_NAME'])
+    return d
+
+
+def _dasar_tanpa_uri():
     return {
         # ---- Database (MariaDB) ----
         'DB_HOST': os.getenv('DB_HOST', '127.0.0.1'), 'DB_PORT': _int('DB_PORT', 3306), 'DB_USER': os.getenv('DB_USER', 'sawitku'),
@@ -40,6 +56,9 @@ def _dasar():
         'MAKS_MB': _int('MAKS_MB', 2),
         'MAKS_PESANAN_TERTUNDA': _int('MAKS_PESANAN_TERTUNDA', 5),   # pesanan 'menunggu_bayar' per pengguna (cegah penimbunan stok)
         'SWEEP_INTERVAL_MS': 10_000,
+        # ---- Log aktivitas masuk/keluar ----
+        'LOG_DIR': os.getenv('LOG_DIR', 'logs').strip(),   # folder berkas aktivitas.log; kosong = hanya database
+        'LOG_HARI': _int('LOG_HARI', 180),                  # baris log di database dihapus setelah sekian hari
         # ---- Pembatas laju & chat ----
         'LAJU_DAFTAR': _int('LAJU_DAFTAR', 10), 'LAJU_KONTAK': _int('LAJU_KONTAK', 5),   # per IP per 10 menit
         'LAJU_CHAT': _int('LAJU_CHAT', 20), 'CHAT_MAKS_BERUNTUN': _int('CHAT_MAKS_BERUNTUN', 30),

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block judul %}{{ status }} | SawitKu{% endblock %}
+{% block robots %}<meta name="robots" content="noindex">{% endblock %}
+{% block isi %}
+<main class="min-h-screen grid place-items-center px-4 text-center">
+  <div>
+    <img src="/shared/logo.png" alt="Logo SawitKu" width="64" height="64" class="mx-auto rounded-2xl">
+    <p class="mt-6 text-6xl font-extrabold font-display text-brand-700">{{ status }}</p>
+    <h1 class="mt-2 text-xl font-bold">{{ pesan }}</h1>
+    <a href="/" class="btn btn-p btn-besar mt-6 inline-flex">Kembali ke beranda</a>
+  </div>
+</main>
+{% endblock %}

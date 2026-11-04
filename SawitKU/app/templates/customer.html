@@ -1,12 +1,9 @@
-<!doctype html><html lang="id"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
-<meta name="referrer" content="no-referrer"><meta name="robots" content="noindex"><link rel="icon" type="image/png" sizes="32x32" href="/shared/favicon-32.png"><link rel="icon" href="/shared/favicon.ico" sizes="any"><link rel="apple-touch-icon" href="/shared/apple-touch-icon.png">
-<title>Dashboard Customer | SawitKU</title>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com"></script><script src="/shared/tailwind.js"></script><link rel="stylesheet" href="/shared/base.css"><link rel="stylesheet" href="/customer/style.css">
-</head>
-<body class="font-sans text-slate-800 antialiased"><div id="app" class="flex min-h-screen" hidden>
+{% extends "base.html" %}
+{% block judul %}Dashboard Customer | SawitKU{% endblock %}
+{% block robots %}<meta name="robots" content="noindex">{% endblock %}
+{% block css %}<link rel="stylesheet" href="{{ aset('/customer/style.css') }}">{% endblock %}
+{% block isi %}
+<div id="app" class="flex min-h-screen" hidden>
 <div id="overlay" class="hidden fixed inset-0 bg-slate-900/50 z-50 lg:hidden"></div>
 <aside id="sidebar" class="sidebar bg-white border-r border-slate-200 flex flex-col p-4 sticky top-0 h-screen shrink-0 overflow-y-auto overflow-x-hidden" aria-label="Navigasi utama">
   <a href="/" class="flex items-center gap-3 px-2 h-12 font-extrabold font-display text-xl text-brand-700"><img src="/shared/logo.png" alt="Logo SawitKU" width="48" height="48" class="w-10 h-10 rounded-xl object-cover shrink-0"><span class="lbl">Sawit<span class="text-sun-500">Ku</span></span></a>
@@ -147,6 +144,7 @@
     <p id="ge-err" class="text-sm text-rose-600 min-h-5" role="alert"></p>
     <div class="flex justify-end gap-2"><button type="button" data-tutup class="btn btn-o">Batal</button><button type="button" id="ge-ok" class="btn btn-p">Kirim kode</button></div></div>
 </template>
-
-<script src="/shared/core.js"></script><script src="/shared/chat.js"></script><script src="/customer/script.js"></script>
-</body></html>
+{% endblock %}
+{% block scripts %}
+<script src="{{ aset('/shared/core.js') }}"></script><script src="{{ aset('/shared/chat.js') }}"></script><script src="{{ aset('/customer/script.js') }}"></script>
+{% endblock %}

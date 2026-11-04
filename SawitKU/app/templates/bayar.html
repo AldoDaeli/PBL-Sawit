@@ -1,12 +1,8 @@
-<!doctype html><html lang="id"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
-<meta name="referrer" content="no-referrer"><meta name="robots" content="noindex"><link rel="icon" type="image/png" sizes="32x32" href="/shared/favicon-32.png"><link rel="icon" href="/shared/favicon.ico" sizes="any"><link rel="apple-touch-icon" href="/shared/apple-touch-icon.png">
-<title>Pembayaran | SawitKu</title>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com"></script><script src="/shared/tailwind.js"></script><link rel="stylesheet" href="/shared/base.css"><link rel="stylesheet" href="/bayar/style.css">
-</head>
-<body class="font-sans text-slate-800 antialiased">
+{% extends "base.html" %}
+{% block judul %}Pembayaran | SawitKu{% endblock %}
+{% block robots %}<meta name="robots" content="noindex">{% endblock %}
+{% block css %}<link rel="stylesheet" href="{{ aset('/bayar/style.css') }}">{% endblock %}
+{% block isi %}
 <header class="bg-white border-b border-slate-100"><div class="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
   <a href="/" class="flex items-center gap-2 font-extrabold font-display text-xl text-brand-700"><img src="/shared/logo.png" alt="Logo SawitKu" width="48" height="48" class="w-9 h-9 rounded-xl object-cover">Sawit<span class="text-sun-500">Ku</span></a>
   <a href="/dashboard#pesanan" class="btn btn-o"><span data-ikon="back" data-kelas="w-4 h-4"></span>Pesanan saya</a>
@@ -90,6 +86,7 @@
     <div class="flex justify-end gap-2"><button type="button" data-tutup class="btn btn-o">Batal</button><button class="btn btn-p">Pakai metode ini</button></div></form>
 </template>
 <template id="t-opsi-metode"><label class="opsi-bayar"><input type="radio" name="metode" data-a-value="{kode}" data-cls="dipilih=checked"><span data-a-data-ikon="{ikon}"></span><span class="font-semibold text-sm" data-t="label"></span></label></template>
-
-<script src="/shared/core.js"></script><script src="/bayar/script.js"></script>
-</body></html>
+{% endblock %}
+{% block scripts %}
+<script src="{{ aset('/shared/core.js') }}"></script><script src="{{ aset('/bayar/script.js') }}"></script>
+{% endblock %}

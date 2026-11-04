@@ -1,0 +1,8 @@
+{% macro tab(aktif) %}
+      <div class="flex gap-8 justify-center border-b border-slate-200 mb-5">
+        {% for kode, label, url in (('masuk', 'Masuk', '/masuk'), ('daftar', 'Daftar', '/daftar')) %}
+        {% if kode == aktif %}<a class="pb-3 font-bold text-brand-700 border-b-2 border-brand-600 -mb-px text-sm">{{ label }}</a>
+        {% else %}<a href="{{ url }}" class="pb-3 font-bold text-slate-400 hover:text-brand-600 text-sm transition">{{ label }}</a>{% endif %}
+        {% endfor %}
+      </div>
+{% endmacro %}

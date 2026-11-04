@@ -2,12 +2,13 @@
 batas ukuran body, CORS, kompresi gzip, dan penanganan galat yang selalu berupa JSON {"error": "..."}."""
 import gzip, logging, time
 
-from flask import g, jsonify, make_response, request
+from flask import g, jsonify, make_response, render_template, request
 from werkzeug.exceptions import HTTPException
 
 from .config import cfg
-from .db import mulai_konteks, tutup
+from .db import mulai_konteks, konteks, tutup
 from .errors import ApiError
+from .web import tailwind_cdn
 
 log = logging.getLogger('sawitku')
 PESAN_HTTP = {404: 'Data tidak ditemukan.', 405: 'Metode tidak diizinkan.', 413: 'Ukuran data terlalu besar.', 500: 'Terjadi kesalahan pada server.'}
@@ -39,6 +40,17 @@ def _asal_ok(asal):
 def _json_galat(pesan, status, headers=()):
     r = jsonify({'error': pesan}); r.status_code = status
     for k, v in headers: r.headers[k] = v
+    return r
+
+
+def _minta_html():
+    """Browser yang membuka halaman (bukan API/fetch) diberi halaman galat HTML; klien lain tetap menerima JSON."""
+    return not request.path.startswith('/api') and request.accept_mimetypes.best == 'text/html'
+
+
+def _html_galat(pesan, status):
+    r = make_response(render_template('galat.html', status=status, pesan=pesan, tailwind_cdn=tailwind_cdn()), status)
+    r.headers['Cache-Control'] = 'no-store'
     return r
 
 
@@ -95,7 +107,9 @@ def pasang(app):
     @app.errorhandler(HTTPException)
     def _http(e):
         extra = [(k, v) for k, v in e.get_headers() if k.lower() not in ('content-type', 'content-length')]     # mis. Allow pada 405
-        return _json_galat(PESAN_HTTP.get(e.code) or e.description, e.code or 500, extra)
+        pesan = PESAN_HTTP.get(e.code) or e.description
+        if _minta_html(): return _html_galat(pesan, e.code or 500)
+        return _json_galat(pesan, e.code or 500, extra)
 
     @app.errorhandler(Exception)
     def _tak_terduga(e):

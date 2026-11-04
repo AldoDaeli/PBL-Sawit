@@ -1,22 +1,7 @@
-<!doctype html>
-<html lang="id">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<!-- 'unsafe-eval' hanya dibutuhkan Tailwind CDN. Hapus saat produksi (build Tailwind CLI). -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
-<meta name="referrer" content="no-referrer">
-<link rel="icon" type="image/png" sizes="32x32" href="/shared/favicon-32.png"><link rel="icon" href="/shared/favicon.ico" sizes="any"><link rel="apple-touch-icon" href="/shared/apple-touch-icon.png">
-<title>SawitKu | Toko Tanaman Online</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="/shared/tailwind.js"></script>
-<link rel="stylesheet" href="/shared/base.css">
-<link rel="stylesheet" href="/landing/style.css">
-</head>
-<body class="font-sans text-slate-800 antialiased">
-
+{% extends "base.html" %}
+{% block judul %}SawitKu | Toko Tanaman Online{% endblock %}
+{% block css %}<link rel="stylesheet" href="{{ aset('/landing/style.css') }}">{% endblock %}
+{% block isi %}
 <div class="bg-brand-900 text-brand-100 text-xs">
   <div class="max-w-7xl mx-auto px-4 py-2 flex justify-center md:justify-between gap-6 flex-wrap">
     <span class="flex items-center gap-2"><span data-ikon="shield" data-kelas="w-4 h-4"></span>Tanaman sehat bergaransi</span>
@@ -43,12 +28,12 @@
     <div class="max-w-7xl mx-auto px-4 flex items-center h-12 gap-2">
       <div class="relative">
         <button id="btn-kat" class="h-12 px-4 bg-brand-900 hover:bg-black/30 flex items-center gap-2 font-semibold text-sm transition" aria-expanded="false" aria-controls="menu-kat"><span data-ikon="menu" data-kelas="w-4 h-4"></span>Kategori</button>
-        <ul id="menu-kat" class="hidden absolute left-0 top-full w-60 bg-white text-slate-700 rounded-b-xl shadow-xl py-2 animate-pop"></ul>
+        <ul id="menu-kat" class="hidden absolute left-0 top-full w-60 bg-white text-slate-700 rounded-b-xl shadow-xl py-2 animate-pop">{% for k in kategori %}<li><a href="#katalog" data-kat="{{ k }}" class="block px-4 py-2.5 text-sm hover:bg-brand-50 hover:text-brand-700">{{ k }}</a></li>{% endfor %}</ul>
       </div>
       <div class="hidden md:flex items-center text-sm font-semibold">
         <a href="#beranda" class="px-4 py-3.5 hover:bg-brand-800 transition">Beranda</a><a href="#terlaris" class="px-4 py-3.5 hover:bg-brand-800 transition">Terlaris</a><a href="#katalog" class="px-4 py-3.5 hover:bg-brand-800 transition">Katalog</a><a href="#kontak" class="px-4 py-3.5 hover:bg-brand-800 transition">Kontak</a>
       </div>
-      <a id="kontak-wa" href="https://wa.me/6285147314821" target="_blank" rel="noopener noreferrer" class="ml-auto flex items-center gap-2 text-sm font-semibold pl-4 border-l border-brand-500 h-12" aria-label="Chat WhatsApp SawitKu"><span data-ikon="phone" data-kelas="w-5 h-5"></span><span class="leading-tight"><span class="block text-[11px] text-brand-100 font-normal">Chat WhatsApp</span><span id="kontak-wa-teks">+62 851-4731-4821</span></span></a>
+      <a id="kontak-wa" href="https://wa.me/6281234567890" target="_blank" rel="noopener noreferrer" class="ml-auto flex items-center gap-2 text-sm font-semibold pl-4 border-l border-brand-500 h-12" aria-label="Chat WhatsApp SawitKu"><span data-ikon="phone" data-kelas="w-5 h-5"></span><span class="leading-tight"><span class="block text-[11px] text-brand-100 font-normal">Chat WhatsApp</span><span id="kontak-wa-teks">+62 812-3456-7890</span></span></a>
     </div>
     <div id="nav-mobile" class="hidden md:hidden bg-brand-800 px-4 pb-3 text-sm font-semibold"><a class="block py-2" href="#beranda">Beranda</a><a class="block py-2" href="#terlaris">Terlaris</a><a class="block py-2" href="#katalog">Katalog</a><a class="block py-2" href="#kontak">Kontak</a></div>
   </nav>
@@ -71,8 +56,8 @@
   <div data-reveal class="mb-6"><h2 class="text-3xl md:text-4xl font-extrabold">Semua produk</h2></div>
   <div data-reveal class="bg-white border border-slate-200 rounded-2xl p-4 mb-6 space-y-4">
     <div class="flex flex-wrap gap-3 items-center">
-      <select id="f-kat" class="in !w-auto" aria-label="Kategori"></select>
-      <select id="f-harga" class="in !w-auto" aria-label="Rentang harga"><option value="">Semua harga</option><option value="0-50000">Di bawah Rp50 rb</option><option value="50000-100000">Rp50 rb – 100 rb</option><option value="100000-200000">Rp100 rb – 200 rb</option><option value="200000-99999999">Di atas Rp200 rb</option></select>
+      <select id="f-kat" class="in !w-auto" aria-label="Kategori"><option value="">Semua kategori</option>{% for k in kategori %}<option value="{{ k }}">{{ k }}</option>{% endfor %}</select>
+      <select id="f-harga" class="in !w-auto" aria-label="Rentang harga"><option value="">Semua harga</option>{% for nilai, label in rentang_harga %}<option value="{{ nilai }}">{{ label }}</option>{% endfor %}</select>
       <select id="f-urut" class="in !w-auto" aria-label="Urutkan"><option value="populer">Terpopuler</option><option value="murah">Harga terendah</option><option value="mahal">Harga tertinggi</option><option value="rating">Rating tertinggi</option></select>
       <button id="f-reset" class="btn btn-o">Atur ulang</button>
       <span id="jml-hasil" class="ml-auto text-sm text-slate-500" aria-live="polite"></span>
@@ -80,11 +65,8 @@
     <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Rating minimal">
       <span class="text-sm font-semibold text-slate-600 mr-1">Rating</span>
       <button class="tab aktif" data-rating="0">Semua</button>
-      <button class="tab inline-flex items-center gap-1" data-rating="1">1 <svg class="ic ic-isi w-3.5 h-3.5 text-sun-500"><use href="/shared/icons.svg#star"/></svg> ke atas</button>
-      <button class="tab inline-flex items-center gap-1" data-rating="2">2 <svg class="ic ic-isi w-3.5 h-3.5 text-sun-500"><use href="/shared/icons.svg#star"/></svg> ke atas</button>
-      <button class="tab inline-flex items-center gap-1" data-rating="3">3 <svg class="ic ic-isi w-3.5 h-3.5 text-sun-500"><use href="/shared/icons.svg#star"/></svg> ke atas</button>
-      <button class="tab inline-flex items-center gap-1" data-rating="4">4 <svg class="ic ic-isi w-3.5 h-3.5 text-sun-500"><use href="/shared/icons.svg#star"/></svg> ke atas</button>
-      <button class="tab inline-flex items-center gap-1" data-rating="5">5 <svg class="ic ic-isi w-3.5 h-3.5 text-sun-500"><use href="/shared/icons.svg#star"/></svg></button>
+      {% for n in range(1, 6) %}<button class="tab inline-flex items-center gap-1" data-rating="{{ n }}">{{ n }} <svg class="ic ic-isi w-3.5 h-3.5 text-sun-500"><use href="/shared/icons.svg#star"/></svg>{% if n < 5 %} ke atas{% endif %}</button>
+      {% endfor %}
     </div>
   </div>
   <div id="grid-katalog" class="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6"></div>
@@ -101,7 +83,7 @@
       <div><label class="text-sm font-semibold" for="k-nama">Nama</label><input id="k-nama" maxlength="50" autocomplete="name" class="in mt-1"></div>
       <div class="grid sm:grid-cols-2 gap-4">
         <div><label class="text-sm font-semibold" for="k-email">Email</label><input id="k-email" type="email" maxlength="100" autocomplete="email" class="in mt-1"></div>
-        <div><label class="text-sm font-semibold" for="k-jenis">Keperluan</label><select id="k-jenis" class="in mt-1"><option>Pertanyaan</option><option>Keluhan</option><option>Kerja sama</option></select></div>
+        <div><label class="text-sm font-semibold" for="k-jenis">Keperluan</label><select id="k-jenis" class="in mt-1">{% for j in jenis_kontak %}<option>{{ j }}</option>{% endfor %}</select></div>
       </div>
       <div><label class="text-sm font-semibold" for="k-isi">Pesan</label><textarea id="k-isi" rows="4" maxlength="500" class="in mt-1"></textarea></div>
       <p id="k-err" class="text-sm text-rose-600 min-h-5" role="alert"></p>
@@ -124,7 +106,7 @@
       <li><a class="hover:text-white transition" href="/masuk">Masuk</a></li><li><a class="hover:text-white transition" href="/daftar">Daftar</a></li>
       <li><a class="hover:text-white transition" href="/dashboard#pesanan">Pesanan saya</a></li><li><a class="hover:text-white transition" href="/dashboard#lacak">Lacak paket</a></li></ul></nav>
   </div>
-  <div class="border-t border-brand-800"><div class="max-w-7xl mx-auto px-4 py-5 flex flex-wrap items-center justify-between gap-3"><span>&copy; 2026 SawitKu. PBL RKS Tim 304.</span>
+  <div class="border-t border-brand-800"><div class="max-w-7xl mx-auto px-4 py-5 flex flex-wrap items-center justify-between gap-3"><span>&copy; {{ tahun }} SawitKu. PBL RKS Tim 304.</span>
     <a href="#beranda" class="inline-flex items-center gap-2 font-semibold text-white hover:text-sun-400 transition">Kembali ke atas <span aria-hidden="true">&uarr;</span></a></div></div>
 </footer>
 <button id="ke-atas" type="button" aria-label="Kembali ke atas" class="hidden fixed bottom-5 right-5 z-40 w-12 h-12 rounded-full bg-brand-600 hover:bg-brand-700 text-white shadow-lg shadow-brand-900/30 place-items-center text-xl transition active:scale-95">&uarr;</button>
@@ -192,8 +174,8 @@
 <template id="t-auth-user"><a data-href="{beranda}" class="flex items-center gap-2 h-11 pl-1 pr-4 rounded-xl bg-brand-50 hover:bg-brand-100 text-sm font-semibold text-brand-800 transition"><span data-avatar></span><span class="hidden sm:inline">Dashboard</span></a></template>
 <template id="t-chat-kotak"><div class="bg-white text-slate-800 p-6 md:p-10 flex flex-col"><h3 class="font-extrabold text-lg">Chat dengan admin</h3><p class="text-sm text-slate-500 mb-3">Pesanmu langsung masuk ke admin dan balasannya muncul di sini.</p><div data-chat class="h-[420px] rounded-2xl border border-slate-100 overflow-hidden"></div></div></template>
 <template id="t-ajak-masuk"><p class="text-xs text-slate-500 text-center">Ingin chat langsung dengan admin dan melihat balasannya di sini? <a href="/masuk?next=landing" class="font-semibold text-brand-700 underline">Masuk dulu</a></p></template>
-
-<script src="/shared/core.js"></script><script src="/shared/chat.js"></script>
-<script src="/landing/script.js"></script>
-</body>
-</html>
+{% endblock %}
+{% block scripts %}
+<script src="{{ aset('/shared/core.js') }}"></script><script src="{{ aset('/shared/chat.js') }}"></script>
+<script src="{{ aset('/landing/script.js') }}"></script>
+{% endblock %}

@@ -1,22 +1,19 @@
 """Melayani frontend statis, URL pendek halaman, dan berkas unggahan (/media). Satu origin dengan API: tanpa CORS, CSP 'self' berlaku."""
-import gzip, os, re
+import gzip, os, re, time
 
-from flask import Response, abort, redirect, request
+from flask import Response, abort, redirect, render_template, request
 
-from .config import cfg
+from .config import cfg, KATEGORI, RENTANG_HARGA, JENIS_KONTAK
 from .uploads import baca_media
 
 # folder halaman -> URL pendek
 HALAMAN = {'landing': '/', 'login': '/masuk', 'register': '/daftar', 'lupa': '/lupa-password', 'customer': '/dashboard', 'admin': '/admin'}
 ASET = re.compile(r'\.(js|css|svg|png|jpe?g|webp|ico)$', re.I)
 MEDIA_NAMA = re.compile(r'[0-9a-f]{32}\.jpg')
-REF = re.compile(r'(src|href)="(/(?:shared|landing|login|lupa|register|customer|admin|produk|bayar)/[A-Za-z0-9_.\-]+\.(?:js|css))"')
-TW_CDN = re.compile(r'<script src="https://cdn\.tailwindcss\.com"></script>\s*<script src="/shared/tailwind\.js"></script>')
 # Tipe berkas ditetapkan sendiri (bukan dari registri OS, yang di Windows kadang salah untuk .js)
 TIPE = {'.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
         '.webp': 'image/webp', '.ico': 'image/x-icon'}
 KOMPRES = {'.js', '.css', '.svg'}
-_html = {}      # folder -> (mtime, teks)
 _aset = {}      # jalur -> ((mtime_ns, ukuran), isi, isi gzip | None): aset kecil disimpan di memori beserta versi terkompresnya
 
 
@@ -25,19 +22,21 @@ def _mtime(rel):
     except OSError: return 0
 
 
-def halaman(folder):
-    """Sajikan HTML halaman. (1) Tiap aset lokal diberi ?v=<waktu ubah> agar bisa di-cache browser selamanya tapi langsung segar
-    saat berkas berubah. (2) Bila frontend/shared/app.css ada (hasil `npm run css`), Tailwind CDN yang berat dibuang dan CSP diperketat."""
-    akar = cfg['FRONTEND_DIR']; jalur = os.path.join(akar, folder, 'index.html')
-    mt = os.stat(jalur).st_mtime
-    if folder not in _html or _html[folder][0] != mt:
-        with open(jalur, encoding='utf-8') as f: _html[folder] = (mt, f.read())
-    html = _html[folder][1]
-    if os.path.isfile(os.path.join(akar, 'shared', 'app.css')):
-        html = TW_CDN.sub('<link rel="stylesheet" href="/shared/app.css">', html).replace(" 'unsafe-eval' https://cdn.tailwindcss.com", '')
-        html = re.sub(r"<!-- 'unsafe-eval'[^>]*-->\n?", '', html)
-    html = REF.sub(lambda m: f'{m.group(1)}="{m.group(2)}?v={_mtime(m.group(2)[1:])}"', html)
-    return Response(html, mimetype='text/html', headers={'Cache-Control': 'no-cache'})
+def aset(jalur):
+    """Fungsi Jinja: URL aset lokal diberi ?v=<waktu ubah> agar bisa di-cache browser selamanya tapi langsung segar saat berkas berubah."""
+    return f'{jalur}?v={_mtime(jalur.lstrip("/"))}'
+
+
+def tailwind_cdn():
+    """Tailwind CDN dipakai selama frontend/shared/app.css (hasil `npm run css`) belum ada. Setelah di-build, CDN dan 'unsafe-eval' hilang dari CSP."""
+    return not os.path.isfile(os.path.join(cfg['FRONTEND_DIR'], 'shared', 'app.css'))
+
+
+def halaman(nama):
+    """Render templates/<nama>.html (Jinja2). Data server (kategori, filter harga, tahun, ...) disisipkan di sini; interaksi tetap di JS."""
+    return Response(render_template(nama + '.html', kategori=KATEGORI, rentang_harga=RENTANG_HARGA, jenis_kontak=JENIS_KONTAK,
+                                    tahun=time.localtime().tm_year, tailwind_cdn=tailwind_cdn()),
+                    mimetype='text/html', headers={'Cache-Control': 'no-cache'})
 
 
 def _kirim_aset(jalur, cache):
@@ -58,6 +57,7 @@ def _kirim_aset(jalur, cache):
 
 
 def pasang(app):
+    app.jinja_env.globals["aset"] = aset
     """Daftarkan rute web. Rute /api sudah terdaftar (blueprint); catch-all di bawah menolak /api/* yang tidak dikenal dengan 404 JSON."""
 
     @app.get('/media/<folder>/<nama>')

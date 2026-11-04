@@ -4,9 +4,10 @@ Alur aman: pembeli membayar ke QR/VA Midtrans, lalu WAJIB mengunggah bukti; admi
 sebelum menyetujui. Webhook/cek status Midtrans hanya mencatat status (bahan verifikasi), tidak pernah menyetujui pesanan."""
 import json, logging, secrets
 
+from flask import request
 
 from . import api, ok
-from .. import midtrans
+from .. import aktivitas, midtrans
 from ..db import get_db
 from ..errors import ApiError
 from ..schemas import badan, Isi, MetodeIn, BuktiIn
@@ -48,6 +49,7 @@ def buat_pembayaran(u, oid):
         db.commit()
         if o['midtrans_id']: midtrans.batalkan(o['midtrans_id'])
         _tagihan(db, oid, u, o, metode)
+        aktivitas.catat(db, 'pembayaran.tagihan', u, f'pesanan#{oid}', {'metode': metode, 'total': o['total'], 'mengganti_tagihan_lama': bool(o['midtrans_id'])})
     return ok(muat_pesanan(db, [db.one('SELECT * FROM pesanan WHERE id=%s', (oid,))])[0])
 
 
@@ -56,7 +58,9 @@ def buat_pembayaran(u, oid):
 def cek_pembayaran(u, oid):
     db = get_db(); o = milik(db, oid, u['id'])
     _sinkron(db, o)
-    return ok(muat_pesanan(db, [db.one('SELECT * FROM pesanan WHERE id=%s', (oid,))])[0])
+    baru = db.one('SELECT * FROM pesanan WHERE id=%s', (oid,))
+    aktivitas.catat(db, 'pembayaran.cek', u, f'pesanan#{oid}', {'status_midtrans': baru['midtrans_status'] or '-'})
+    return ok(muat_pesanan(db, [baru])[0])
 
 
 def _sinkron(db, o):
@@ -83,6 +87,7 @@ def unggah_bukti(u, oid):
     if not o['midtrans_id']: raise ApiError('Buat tagihan pembayaran dulu sebelum mengunggah bukti.', 409)
     path = simpan_data_url(b.bukti, 'bukti')
     db.run('UPDATE pesanan SET bukti=%s, status=%s, alasan=%s, t_bayar=%s WHERE id=%s', (path, 'menunggu_verifikasi', '', now_ms(), oid))
+    aktivitas.catat(db, 'pembayaran.bukti', u, f'pesanan#{oid}', {'total': o['total'], 'unggah_ulang': bool(o['ditolak']), 'metode': o['metode']})
     db.commit(); hapus_media(o['bukti'], db)
     return ok()
 
@@ -96,16 +101,20 @@ def notifikasi():
         raise ApiError('Tanda tangan tidak sah.', 403)
     db = get_db()
     o = db.one('SELECT * FROM pesanan WHERE midtrans_id=%s FOR UPDATE', (str(d.get('order_id')),))
-    if o: _catat(db, o, d)
+    if o:
+        _catat(db, o, d)
+        aktivitas.catat(db, 'pembayaran.webhook', None, f"pesanan#{o['id']}", {'order_id': str(d.get('order_id')), 'status': str(d.get('transaction_status')), 'total': o['total']}, peran='sistem')
     return ok()
 
 
 @api.post('/admin/pesanan/<int:oid>/midtrans/cek', tags=['Admin'], summary='Admin: cek status pembayaran ke Midtrans')
 @admin_saja
-def admin_cek(_, oid):
+def admin_cek(adm, oid):
     db = get_db()
     o = db.one('SELECT * FROM pesanan WHERE id=%s FOR UPDATE', (oid,))
     if not o: raise ApiError('Pesanan tidak ditemukan.', 404)
     if not o['midtrans_id']: raise ApiError('Pesanan ini belum punya tagihan Midtrans.', 409)
     _sinkron(db, o)
-    return ok(muat_pesanan(db, [db.one('SELECT * FROM pesanan WHERE id=%s', (oid,))])[0])
+    baru = db.one('SELECT * FROM pesanan WHERE id=%s', (oid,))
+    aktivitas.catat(db, 'pembayaran.cek_admin', adm, f'pesanan#{oid}', {'status_midtrans': baru['midtrans_status'] or '-'})
+    return ok(muat_pesanan(db, [baru])[0])

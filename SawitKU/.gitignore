@@ -7,3 +7,4 @@ uploads/*
 node_modules/
 .jwt_secret
 *.db
+logs/

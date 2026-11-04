@@ -1,5 +1,6 @@
 """Data awal contoh SawitKu: 12 produk, 3 akun demo, pesanan, ulasan."""
 import json, os, random, secrets, time
+from .config import KATEGORI
 from .security import hash_pw
 
 HARI = 86_400_000

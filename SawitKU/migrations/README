@@ -1,0 +1,5 @@
+Migrasi database SawitKu (Flask-Migrate / Alembic).
+  flask --app main db upgrade                      # terapkan semua migrasi (buat/ubah tabel)
+  flask --app main db migrate -m "tambah kolom x"  # buat migrasi baru dari perubahan app/models.py
+  flask --app main db downgrade                    # mundur satu versi
+  flask --app main db stamp head                   # database lama (dibuat dari schema.sql): tandai sudah sesuai tanpa mengubah tabel

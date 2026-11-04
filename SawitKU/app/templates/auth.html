@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block css %}<link rel="stylesheet" href="{{ aset('/shared/auth.css') }}">{% endblock %}
+{% block isi %}
+<div class="auth-latar">
+  {% for n in (1, 2, 3, 4) %}<span class="auth-daun d{{ n }}" aria-hidden="true"></span>{% endfor %}
+  <a href="/" class="auth-beranda">&larr; Beranda</a>
+  <main class="auth-tengah">
+    <div class="auth-kartu">
+      <a href="/" class="auth-merk"><img src="/shared/logo.png" alt="Logo SawitKu" width="48" height="48"><span>Sawit<b>Ku</b></span></a>
+{% block kartu %}{% endblock %}
+    </div>
+  </main>
+</div>
+{% endblock %}

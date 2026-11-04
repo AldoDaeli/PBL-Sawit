@@ -129,6 +129,25 @@ CREATE TABLE IF NOT EXISTS pesan_kontak (
   dibuat BIGINT NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Jejak audit: login/logout + semua aksi admin, customer, tamu, dan sistem. Sengaja TANPA foreign key agar riwayat tetap ada walau akun/produk dihapus.
+-- aksi = 'kategori.kejadian' (mis. produk.ubah), target = objek yang dikenai (mis. produk#12), detail = JSON apa yang berubah.
+CREATE TABLE IF NOT EXISTS log_audit (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NULL,
+  username VARCHAR(30) NOT NULL DEFAULT '',
+  peran VARCHAR(10) NOT NULL DEFAULT '',
+  aksi VARCHAR(40) NOT NULL,
+  kategori VARCHAR(20) NOT NULL DEFAULT '',
+  target VARCHAR(80) NOT NULL DEFAULT '',
+  detail TEXT NULL,
+  ip VARCHAR(60) NOT NULL DEFAULT '',
+  perangkat VARCHAR(200) NOT NULL DEFAULT '',
+  waktu BIGINT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE INDEX IF NOT EXISTS idx_audit_waktu ON log_audit (waktu);
+CREATE INDEX IF NOT EXISTS idx_audit_user ON log_audit (user_id, waktu);
+CREATE INDEX IF NOT EXISTS idx_audit_kategori ON log_audit (kategori, waktu);
+
 -- Sesi login (token disimpan sebagai SHA-256, bukan token asli)
 CREATE TABLE IF NOT EXISTS sesi (
   token_hash CHAR(64) NOT NULL PRIMARY KEY,
