@@ -90,6 +90,8 @@ def user_sekarang(db, request):
     if not s or str(s['id']) != k['sub']: return None
     now = now_ms()
     if s['kedaluwarsa'] < now or not s['aktif']:
+        if s['kedaluwarsa'] < now:
+            from . import aktivitas; aktivitas.catat(db, 'auth.habis', s)       # sesi berakhir karena tidak aktif
         db.run('DELETE FROM sesi WHERE token_hash=%s', (_th(k['jti']),)); db.commit(); return None
     masa = cfg['SESI_MENIT'] * 60000
     if s['kedaluwarsa'] - now < masa // 2:      # tanpa tulis+commit DB di setiap request
@@ -108,6 +110,7 @@ def wajib(peran=None):
         def bungkus(*a, **k):
             u = user_sekarang(get_db(), request)
             if not u: raise ApiError('Silakan masuk terlebih dahulu.', 401)
+            konteks().pengguna = u
             if peran and u['peran'] != peran:
                 raise ApiError('Fitur ini khusus akun customer.' if peran == 'customer' else 'Akses ditolak.', 403)
             if u['peran'] == 'admin' and request.method != 'GET':      # jejak audit aksi admin
