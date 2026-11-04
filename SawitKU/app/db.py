@@ -49,10 +49,11 @@ def connect():
 
 # ---------------- Konteks request ----------------
 class Konteks:
-    """Keadaan satu request: koneksi DB (lazy), token JWT baru bila sesi diperpanjang, dan IP klien."""
-    __slots__ = ('db', 'token_baru', 'ip')
+    """Keadaan satu request: koneksi DB (lazy), token JWT baru bila sesi diperpanjang, IP klien, pengguna yang sedang masuk, dan
+    penanda bahwa request ini sudah masuk log aktivitas."""
+    __slots__ = ('db', 'token_baru', 'ip', 'pengguna', 'tercatat')
 
-    def __init__(self): self.db, self.token_baru, self.ip = None, None, '?'
+    def __init__(self): self.db, self.token_baru, self.ip, self.pengguna, self.tercatat = None, None, '?', None, False
 
 
 def mulai_konteks():
