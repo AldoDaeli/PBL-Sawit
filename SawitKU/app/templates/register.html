@@ -1,0 +1,30 @@
+{% extends "auth.html" %}
+{% from "_tab_auth.html" import tab %}
+{% block judul %}Daftar | SawitKu{% endblock %}
+{% block kartu %}
+
+      {{ tab('daftar') }}
+      <h1 id="judul" class="text-xl font-extrabold text-center">Buat akun baru</h1>
+      <p id="sub" class="text-slate-500 text-xs mt-1.5 text-center">Gratis, cukup satu menit.</p>
+      <form id="form" class="mt-5 space-y-3" novalidate autocomplete="on">
+        <div><div class="campur"><span class="ikon" data-ikon="user"></span><input id="username" placeholder="Username" autocomplete="username" maxlength="20" aria-label="Username"></div><p class="bantu" id="e-username"></p></div>
+        <div><div class="campur"><span class="ikon" data-ikon="mail"></span><input id="email" type="email" placeholder="Email" autocomplete="email" maxlength="100" aria-label="Email"></div><p class="bantu" id="e-email"></p></div>
+        <div><div class="campur"><span class="ikon" data-ikon="lock"></span><input id="password" type="password" placeholder="Password" autocomplete="new-password" maxlength="64" aria-label="Password"><button type="button" id="lihat" class="px-3 text-slate-400 hover:text-brand-600" aria-label="Tampilkan password" data-ikon="eye"></button></div>
+          <div class="flex gap-1 mt-2" aria-hidden="true"><i class="kuat"></i><i class="kuat"></i><i class="kuat"></i><i class="kuat"></i></div><p class="bantu" id="e-password"></p></div>
+        <div><div class="campur"><span class="ikon" data-ikon="lock"></span><input id="konfirmasi" type="password" placeholder="Ulangi password" autocomplete="new-password" maxlength="64" aria-label="Ulangi password"></div><p class="bantu" id="e-konfirmasi"></p></div>
+        <p id="err" class="text-sm text-rose-600 min-h-5" role="alert"></p>
+        <button id="btn" class="btn btn-p btn-besar w-full">Daftar</button>
+      </form>
+      <form id="form-otp" class="hidden mt-5 space-y-3" novalidate autocomplete="off">
+        <p class="text-sm text-slate-600 text-center">Kami mengirim kode 6 angka ke <b id="otp-email" class="text-slate-800 break-all"></b>. Berlaku <span id="otp-menit">10</span> menit. Cek juga folder spam.</p>
+        <div class="campur"><span class="ikon" data-ikon="shield"></span><input id="kode" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="- - - - - -" autocomplete="one-time-code" aria-label="Kode OTP 6 angka" class="text-center font-bold tracking-[.6em] text-sm"></div>
+        <p id="err-otp" class="text-sm text-rose-600 min-h-5" role="alert"></p>
+        <button id="btn-otp" class="btn btn-p btn-besar w-full">Verifikasi &amp; Buat Akun</button>
+        <div class="flex justify-between items-center text-sm"><button type="button" id="ulang" class="font-bold text-brand-600 hover:underline disabled:text-slate-400 disabled:no-underline" disabled>Kirim ulang kode</button><button type="button" id="ubah" class="text-slate-500 hover:text-brand-600">Ubah data</button></div>
+      </form>
+      <p class="mt-5 text-xs text-slate-500 text-center">Sudah punya akun? <a href="/masuk" class="font-bold text-brand-600 hover:underline">Masuk</a></p>
+{% endblock %}
+{% block scripts %}
+<script src="{{ aset('/shared/core.js') }}"></script>
+<script src="{{ aset('/register/script.js') }}"></script>
+{% endblock %}

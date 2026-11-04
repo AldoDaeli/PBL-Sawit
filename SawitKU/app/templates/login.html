@@ -1,0 +1,22 @@
+{% extends "auth.html" %}
+{% from "_tab_auth.html" import tab %}
+{% block judul %}Masuk | SawitKu{% endblock %}
+{% block kartu %}
+
+      {{ tab('masuk') }}
+      <h1 class="text-xl font-extrabold text-center">Selamat datang kembali</h1>
+      <p class="text-slate-500 text-xs mt-1.5 text-center">Masuk untuk melanjutkan belanja tanamanmu.</p>
+      <p id="info" class="hidden mt-4 text-sm rounded-xl px-4 py-3 bg-amber-50 text-amber-800" role="status"></p>
+      <form id="form" class="mt-5 space-y-3" novalidate autocomplete="on">
+        <div class="campur"><span class="ikon" data-ikon="user"></span><input id="username" name="username" placeholder="Username" autocomplete="username" maxlength="20" required aria-label="Username"></div>
+        <div class="campur"><span class="ikon" data-ikon="lock"></span><input id="password" name="password" type="password" placeholder="Password" autocomplete="current-password" maxlength="64" required aria-label="Password"><button type="button" id="lihat" class="px-3 text-slate-400 hover:text-brand-600" aria-label="Tampilkan password" data-ikon="eye"></button></div>
+        <div class="text-right -mt-1"><a href="/lupa-password" class="text-sm font-semibold text-brand-600 hover:underline">Lupa password?</a></div>
+        <p id="err" class="text-sm text-rose-600 min-h-5" role="alert"></p>
+        <button id="btn" class="btn btn-p btn-besar w-full">Masuk</button>
+      </form>
+      <p class="mt-5 text-xs text-slate-500 text-center">Belum punya akun? <a href="/daftar" class="font-bold text-brand-600 hover:underline">Daftar sekarang</a></p>
+{% endblock %}
+{% block scripts %}
+<script src="{{ aset('/shared/core.js') }}"></script>
+<script src="{{ aset('/login/script.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "auth.html" %}
+{% block judul %}Lupa Password | SawitKu{% endblock %}
+{% block kartu %}
+      <h1 class="text-xl font-extrabold text-center">Lupa password?</h1>
+      <p id="sub" class="text-slate-500 text-xs mt-1.5 text-center">Masukkan email akunmu. Kami kirim kode verifikasi 6 angka untuk membuat password baru.</p>
+      <form id="f1" class="mt-5 space-y-3" novalidate>
+        <div class="campur"><span class="ikon" data-ikon="mail"></span><input id="email" type="email" placeholder="Email akun" autocomplete="email" maxlength="100" required aria-label="Email"></div>
+        <p id="err1" class="text-sm text-rose-600 min-h-5" role="alert"></p>
+        <button id="b1" class="btn btn-p btn-besar w-full">Kirim Kode</button>
+      </form>
+      <form id="f2" class="hidden mt-5 space-y-3" novalidate>
+        <div class="campur"><span class="ikon" data-ikon="shield"></span><input id="kode" inputmode="numeric" placeholder="Kode 6 angka" autocomplete="one-time-code" maxlength="6" required aria-label="Kode OTP"></div>
+        <div class="campur"><span class="ikon" data-ikon="lock"></span><input id="pw" type="password" placeholder="Password baru" autocomplete="new-password" maxlength="64" required aria-label="Password baru"></div>
+        <div class="campur"><span class="ikon" data-ikon="lock"></span><input id="pw2" type="password" placeholder="Ulangi password baru" autocomplete="new-password" maxlength="64" required aria-label="Ulangi password baru"></div>
+        <p class="text-xs text-slate-500 -mt-1">Minimal 8 karakter, kombinasi huruf dan angka.</p>
+        <p id="err2" class="text-sm text-rose-600 min-h-5" role="alert"></p>
+        <button id="b2" class="btn btn-p btn-besar w-full">Simpan Password Baru</button>
+        <button type="button" id="ulang" class="w-full text-sm font-semibold text-brand-600 hover:underline disabled:text-slate-400 disabled:no-underline" disabled>Kirim ulang kode</button>
+      </form>
+      <p class="mt-5 text-xs text-slate-500 text-center"><a href="/masuk" class="font-bold text-brand-600 hover:underline">&larr; Kembali ke halaman masuk</a></p>
+{% endblock %}
+{% block scripts %}
+<script src="{{ aset('/shared/core.js') }}"></script>
+<script src="{{ aset('/lupa/script.js') }}"></script>
+{% endblock %}
