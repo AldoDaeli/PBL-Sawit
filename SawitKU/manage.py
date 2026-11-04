@@ -7,7 +7,7 @@ import click
 
 from app.config import cfg, AKAR
 from app.db import connect
-from app.security import hash_pw, now_ms
+from app.security import now_ms
 from app.validators import username_ok, email_ok, password_ok
 
 TABEL = ['log_audit', 'otp_reset', 'ulasan_balas', 'media', 'sesi', 'gagal_login', 'otp_daftar', 'otp_email', 'ulasan', 'favorit', 'keranjang',
