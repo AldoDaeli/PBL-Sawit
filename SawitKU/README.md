@@ -36,6 +36,22 @@ OTP, Midtrans, dan perintah `manage.py` **tidak berubah**: database lama dan fro
 Perbedaan kecil yang perlu diketahui: id non-angka di URL (`/api/produk/abc`) dijawab 404 JSON; tanpa token, endpoint terlindungi selalu menjawab 401 lebih dulu
 (sebelumnya body JSON rusak menang atas 401); Swagger UI interaktif (tombol "Try it out") diganti halaman daftar endpoint.
 
+## ORM SQLAlchemy & Migration
+- **Model ORM**: `app/models.py` (17 tabel, sama dengan `schema.sql`), ekstensi di `app/extensions.py` (Flask-SQLAlchemy + Flask-Migrate).
+- **Dipakai langsung oleh**: katalog produk (`GET /api/produk`, `/api/produk/<id>`), CRUD produk admin (`POST/PUT/DELETE /api/admin/produk`) lewat
+  `app/produk_service.py` (kelas `ProdukService`), dan `python manage.py buat-admin` (model `Pengguna`, hash password di model).
+  Bagian lain (login, pesanan, dll.) masih memakai lapisan SQL `app/db.py`; keduanya hidup berdampingan pada database yang sama.
+- **Migration**: folder `migrations/` (Alembic). Migrasi awal `0001_awal` membuat seluruh skema.
+
+```
+pip install -r requirements.txt
+flask --app main db upgrade          # database BARU: buat semua tabel
+flask --app main db stamp head       # database LAMA (dari schema.sql): tandai sudah sesuai, tabel tidak diubah
+flask --app main db migrate -m "tambah kolom x"   # setelah mengubah app/models.py: buat migrasi baru
+flask --app main db upgrade          # terapkan; `db downgrade` untuk mundur satu versi
+```
+Koneksi dibentuk dari `DB_*` di `.env` (MariaDB + PyMySQL) atau `DATABASE_URL` bila diisi.
+
 ## Instalasi dari nol
 ### 1. Prasyarat
 Python 3.10+, MariaDB 10.5+ (atau MySQL 8), Node.js hanya bila ingin membuat CSS Tailwind statis (opsional).
@@ -116,8 +132,35 @@ Semua endpoint di bawah `/api`, format `{"data": ...}` atau `{"error": "..."}`. 
 | Bayar | `POST /pesanan/{id}/pembayaran`, `/pembayaran/cek`, `POST /pesanan/{id}/bukti`, `POST /midtrans/notifikasi` |
 | Terima | `POST /pesanan/{id}/terima` (foto opsional), `GET /lacak` |
 | Ulasan | `POST /ulasan` (rating 1–5), `/ulasan/{id}/balas` |
-| Admin | `/admin/produk`, `/admin/pesanan` (+`/verifikasi`, `/kirim`, `/sampai`, `/midtrans/cek`), `/admin/pengguna`, `/admin/ulasan`, `/admin/kontak`, `/admin/chat` |
+| Admin | `/admin/produk`, `/admin/pesanan` (+`/verifikasi`, `/kirim`, `/sampai`, `/midtrans/cek`), `/admin/pengguna`, `/admin/ulasan`, `/admin/kontak`, `/admin/chat`, `/admin/log` |
 | Chat | `/chat`, `/admin/chat/{uid}` |
+
+## Log audit (semua aktivitas)
+Setiap aksi yang mengubah data dicatat otomatis: siapa (user, peran), apa (`aksi`), terhadap apa (`target`, mis. `produk#12`), rincian (`detail`, JSON), IP, perangkat, dan waktu.
+
+| Kategori | Kode aksi |
+|---|---|
+| Akun | `auth.masuk`, `auth.keluar`, `auth.gagal`, `auth.habis`, `auth.otp_salah`, `auth.daftar_minta`, `auth.daftar_selesai`, `auth.daftar_kirim_ulang`, `auth.lupa_minta`, `auth.password_reset` |
+| Tamu (landing page) | `kontak.kirim` (nama, email, jenis, kutipan isi), dan percobaan daftar / lupa password (email) |
+| Admin: produk | `produk.tambah`, `produk.ubah` (nilai lama → baru), `produk.hapus` |
+| Admin: akun | `pengguna.nonaktifkan`, `pengguna.aktifkan` |
+| Admin: lainnya | `pesanan.verifikasi_setuju`, `pesanan.verifikasi_tolak` (beserta alasan), `pesanan.kirim` (kurir, resi), `pesanan.sampai`, `pembayaran.cek_admin`, `chat.balas_admin` (kutipan 100 karakter), `ulasan.balas_admin` |
+| Pelanggan | `favorit.tambah/hapus`, `keranjang.tambah/ubah/hapus`, `profil.ubah`, `profil.password_salah`, `profil.email_minta`, `profil.email_ganti`, `pesanan.buat`, `pesanan.batal`, `pesanan.terima`, `pembayaran.tagihan`, `pembayaran.cek`, `pembayaran.bukti`, `chat.kirim_customer`, `ulasan.kirim`, `ulasan.balas_customer` |
+| Sistem | `pembayaran.webhook` (Midtrans), `pesanan.batal_otomatis`, `pesanan.selesai_otomatis` |
+
+Jaring pengaman: aksi tulis yang belum punya kode khusus tetap tercatat sebagai `lain.<endpoint>`.
+
+**Yang sengaja tidak disimpan:** password, token, kode OTP, isi gambar/bukti bayar. Isi chat pelanggan hanya dicatat panjangnya. Alamat hanya dicatat "diubah/dihapus" + kota. Username yang diketik saat login gagal tidak disimpan bila akunnya tidak ada (bisa berisi password yang salah ketik).
+
+Tersimpan di tabel `log_audit` dan berkas `logs/aktivitas.log` (berputar otomatis; `LOG_DIR=` kosong bila tidak mau berkas). Baris database dihapus otomatis setelah `LOG_HARI` hari (bawaan 180; 0 = selamanya). Database lama: `python manage.py init-db` membuat tabel baru; tabel lama `log_aktivitas` boleh dihapus (`DROP TABLE log_aktivitas;`).
+
+Admin melihatnya lewat `GET /api/admin/log` (token admin). Filter opsional: `aksi=` (kode persis), `kategori=`, `peran=admin|customer|tamu|sistem`, `q=` (username, IP, target, atau isi detail), `dari=` / `sampai=` (ms epoch), `hal=`, `per=` (maks 200). Contoh:
+```
+GET /api/admin/log?kategori=produk&per=20
+-> {"data": {"total": 2, "hal": 1, "per": 20, "items": [{"id": 31, "username": "admin", "peran": "admin", "aksi": "produk.ubah",
+    "kategori": "produk", "target": "produk#12", "detail": {"nama": "Ficus", "perubahan": {"harga": [150000, 175000]}}, "ip": "103.x.x.x", "waktu": 1761900000000}]}}
+```
+Bila di belakang proxy, atur `PROXY_HOPS` agar kolom IP berisi IP pengunjung asli.
 
 ## Pembayaran Midtrans + bukti bayar
 ```
@@ -152,12 +195,23 @@ app/schemas.py           badan(): pembaca body JSON + kelas Isi (aturan bisnis a
 app/services.py          logika bersama: sapu (batal/selesai otomatis), rating, muat pesanan
 app/midtrans.py          klien Midtrans Core API
 app/routes/              Blueprint: publik, customer, pesanan, pembayaran, admin, chat
-app/web.py               halaman, aset statis, /media
+app/web.py               render halaman (Jinja2), aset statis berversi, /media
+app/templates/           template Jinja2: base.html (layout), auth.html (kartu login/daftar/lupa), landing/produk/bayar/customer/admin.html, galat.html
 app/docs.py              /api/docs dan /api/openapi.json
 frontend/shared/         core.js (Api, Sesi JWT, binder T), base.css, icons.svg, chat.js
-frontend/<halaman>/      index.html (markup + <template>) + script.js (data) + style.css
-tests/test_api.py        105 tes
+frontend/<halaman>/      script.js (data) + style.css; markup-nya ada di app/templates/<halaman>.html
+tests/test_api.py        116 tes
 ```
+
+## Template engine (Jinja2)
+Semua halaman HTML dirender server lewat Jinja2 dari `app/templates/`:
+- `base.html` memuat `<head>` bersama (CSP, favicon, font, Tailwind) dengan blok `judul`, `robots`, `css`, `isi`, `scripts`. Halaman turunan hanya mengisi blok.
+- `auth.html` (turunan `base.html`) adalah kartu login/daftar/lupa; `_tab_auth.html` berisi makro tab Masuk/Daftar.
+- Data dari server disisipkan di template: kategori, rentang harga, jenis pesan kontak (dari `app/config.py`), dan tahun hak cipta. Opsi filter ini ada di HTML sejak awal, JS hanya menyegarkannya.
+- `aset('/shared/core.js')` menambah `?v=<waktu ubah>` agar cache browser selalu segar. Tailwind CDN otomatis diganti `shared/app.css` bila sudah di-build.
+- Browser yang membuka alamat salah mendapat halaman `galat.html`; klien API tetap menerima JSON.
+
+Setelah mengubah kelas Tailwind di template, jalankan ulang `npm run css` (sudah memindai `app/templates/`).
 
 ## Tes
 ```bash
