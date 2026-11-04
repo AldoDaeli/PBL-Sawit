@@ -10,7 +10,7 @@ from ..errors import ApiError
 from ..schemas import badan, KeranjangIn, QtyIn, UlasanIn, TeksIn, ProfilIn, EmailMintaIn, KodeSajaIn
 from ..security import now_ms, wajib, cek_pw, batasi_laju, sisa_blokir, catat_gagal, reset_gagal, ip_klien
 from ..serializers import user_out, produk_out
-from ..services import PRODUK_SQL, hitung_rating
+from ..services import hitung_rating
 from ..uploads import resolve_gambar, hapus_media
 from ..validators import username_ok, email_ok, to_int, baca_alamat
 
