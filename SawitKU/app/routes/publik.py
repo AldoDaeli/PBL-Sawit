@@ -4,15 +4,16 @@ import logging, re, secrets
 from flask import request
 
 from . import api, ok
-from .. import otp, midtrans
-from ..config import cfg, KATEGORI
+from .. import otp, midtrans, aktivitas
+from ..config import cfg, KATEGORI, JENIS_KONTAK
 from ..db import get_db, IntegrityErrors
 from ..errors import ApiError
 from ..schemas import badan, MasukIn, DaftarIn, EmailIn, KodeIn, LupaResetIn, KontakIn
 from ..security import (now_ms, hash_pw, cek_pw, DUMMY_HASH, buat_sesi, hapus_sesi, wajib, sisa_blokir,
                         catat_gagal, reset_gagal, batasi_laju, ip_klien)
 from ..serializers import user_out, produk_out, ulasan_out
-from ..services import sapu, PRODUK_SQL, lanjutan_ulasan
+from ..produk_service import ProdukService
+from ..services import sapu, lanjutan_ulasan
 from ..validators import username_ok, email_ok, password_ok
 
 log = logging.getLogger('sawitku')
@@ -42,18 +43,22 @@ def masuk():
     if not benar:
         log.warning('LOGIN GAGAL akun_ada=%s ip=%s', bool(u), ip_klien())   # nama pengguna tidak dicatat (bisa berisi password salah ketik)
         catat_gagal(db, ku); catat_gagal(db, ki, cfg['MAKS_GAGAL'] * 4)
+        aktivitas.catat(db, 'auth.gagal', u)       # u = None bila username tidak ada (nama yang diketik tidak disimpan)
         db.commit()                              # commit agar hitungan gagal tetap tersimpan
         raise ApiError('Username atau password salah.', 401)
     if not u['aktif']: raise ApiError('Akun dinonaktifkan. Hubungi admin.', 403)
     reset_gagal(db, ku)
     log.info('LOGIN OK user_id=%s ip=%s', u['id'], ip_klien())
+    aktivitas.catat(db, 'auth.masuk', u)
     return ok({'token': buat_sesi(db, u['id'], u['peran']), 'user': user_out(u)})
 
 
 @api.post('/auth/keluar', tags=['Akun'], summary='Keluar: mencabut JWT di server')
 @wajib()
-def keluar(_):
-    hapus_sesi(get_db(), request)
+def keluar(u):
+    db = get_db()
+    hapus_sesi(db, request)
+    aktivitas.catat(db, 'auth.keluar', u)
     return ok()
 
 
@@ -94,6 +99,7 @@ def lupa_password():
     if not email_ok(email): raise ApiError('Format email tidak valid.')
     umum = ok({'berlaku': cfg['OTP_MENIT'], 'jeda': cfg['OTP_JEDA_DETIK']})
     u, now = db.one('SELECT id, username, aktif FROM pengguna WHERE LOWER(email)=%s', (email,)), now_ms()
+    aktivitas.catat(db, 'auth.lupa_minta', None, 'email:' + email, {'email': email, 'akun_terdaftar': bool(u and u['aktif'])})   # tamu minta reset password
     if not u or not u['aktif']: return umum
     p = db.one('SELECT * FROM otp_reset WHERE email=%s', (email,))
     if p and now - p['kirim_terakhir'] < cfg['OTP_JEDA_DETIK'] * 1000: return umum          # jeda kirim ulang
@@ -125,14 +131,17 @@ def lupa_reset():
     if not p or p['kedaluwarsa'] < now_ms() or p['salah'] >= cfg['OTP_MAKS_SALAH']: raise ApiError(gagal, 400)
     if not otp.cocok(otp.hash_kode(email, kode, p['garam']), p['kode_hash']):
         log.warning('OTP RESET SALAH ip=%s', ip_klien())
+        aktivitas.catat(db, 'auth.otp_salah', None, 'email:' + email, {'tujuan': 'lupa_password', 'email': email})
         db.run('UPDATE otp_reset SET salah=salah+1 WHERE email=%s', (email,)); db.commit()
         raise ApiError(gagal, 400)
-    u = db.one('SELECT id, username, aktif FROM pengguna WHERE LOWER(email)=%s', (email,))
+    u = db.one('SELECT id, username, aktif, peran FROM pengguna WHERE LOWER(email)=%s', (email,))
     if not u or not u['aktif']: raise ApiError(gagal, 400)
     db.run('UPDATE pengguna SET hash=%s WHERE id=%s', (hash_pw(pw), u['id']))
     db.run('DELETE FROM otp_reset WHERE email=%s', (email,))
     db.run('DELETE FROM sesi WHERE user_id=%s', (u['id'],))
-    reset_gagal(db, 'u:' + u['username'].lower()); db.commit()
+    reset_gagal(db, 'u:' + u['username'].lower())
+    aktivitas.catat(db, 'auth.password_reset', u, f"pengguna#{u['id']}", {'email': email, 'sesi_lain_dikeluarkan': True})
+    db.commit()
     log.info('PASSWORD RESET user_id=%s ip=%s', u['id'], ip_klien())
     otp.kirim_info_password_diubah(email, u['username'])
     return ok()
@@ -155,6 +164,7 @@ def daftar():
         raise ApiError(f"Kode sudah dikirim. Tunggu {_detik_sisa(p, cfg['OTP_JEDA_DETIK'])} detik sebelum mencoba lagi.", 429)
     if p: p['kirim_n'] = 0                      # pendaftaran ulang dari awal: hitungan kirim dimulai lagi
     kode = _simpan_kode(db, p, email, username, hash_pw(pw))
+    aktivitas.catat(db, 'auth.daftar_minta', None, 'email:' + email, {'username': username, 'email': email})   # tamu mendaftar (akun belum dibuat)
     otp.kirim_kode(email, username, kode)       # gagal kirim -> ApiError -> transaksi di-rollback
     return ok({'email': email, 'berlaku': cfg['OTP_MENIT'], 'jeda': cfg['OTP_JEDA_DETIK']})
 
@@ -172,6 +182,7 @@ def daftar_verifikasi():
     if p['salah'] >= cfg['OTP_MAKS_SALAH']: raise ApiError('Terlalu banyak kode salah. Kirim ulang kode baru.', 429)
     if not otp.cocok(otp.hash_kode(email, kode, p['garam']), p['kode_hash']):
         log.warning('OTP DAFTAR SALAH ip=%s', ip_klien())
+        aktivitas.catat(db, 'auth.otp_salah', None, 'email:' + email, {'tujuan': 'daftar', 'email': email})
         db.run('UPDATE otp_daftar SET salah=salah+1 WHERE email=%s', (email,))
         db.commit()                              # commit agar hitungan salah tetap tersimpan
         sisa = cfg['OTP_MAKS_SALAH'] - p['salah'] - 1
@@ -179,11 +190,12 @@ def daftar_verifikasi():
     if db.one('SELECT id FROM pengguna WHERE LOWER(username)=LOWER(%s)', (p['username'],)): raise ApiError('Username sudah dipakai. Silakan daftar ulang.', 409)
     if db.one('SELECT id FROM pengguna WHERE LOWER(email)=LOWER(%s)', (email,)): raise ApiError('Email sudah terdaftar.', 409)
     try:
-        db.run('INSERT INTO pengguna (username,email,hash,peran,aktif,dibuat) VALUES (%s,%s,%s,%s,1,%s)',
-               (p['username'], email, p['hash'], 'customer', now_ms()))
+        uid_baru, _ = db.run('INSERT INTO pengguna (username,email,hash,peran,aktif,dibuat) VALUES (%s,%s,%s,%s,1,%s)',
+                             (p['username'], email, p['hash'], 'customer', now_ms()))
     except IntegrityErrors:
         raise ApiError('Username atau email sudah terdaftar.', 409)
     db.run('DELETE FROM otp_daftar WHERE email=%s', (email,))
+    aktivitas.catat(db, 'auth.daftar_selesai', {'id': uid_baru, 'username': p['username'], 'peran': 'customer'}, f'pengguna#{uid_baru}', {'email': email})
     return ok()
 
 
@@ -199,6 +211,7 @@ def daftar_kirim_ulang():
         raise ApiError(f"Tunggu {_detik_sisa(p, cfg['OTP_JEDA_DETIK'])} detik sebelum meminta kode lagi.", 429)
     if p['kirim_n'] >= cfg['OTP_MAKS_KIRIM']: raise ApiError('Batas pengiriman kode tercapai. Silakan daftar ulang beberapa saat lagi.', 429)
     kode = _simpan_kode(db, p, email, p['username'], p['hash'])
+    aktivitas.catat(db, 'auth.daftar_kirim_ulang', None, 'email:' + email, {'username': p['username'], 'email': email})
     otp.kirim_kode(email, p['username'], kode)
     return ok({'email': email, 'berlaku': cfg['OTP_MENIT'], 'jeda': cfg['OTP_JEDA_DETIK']})
 
@@ -210,13 +223,13 @@ def kategori(): return ok(KATEGORI)
 
 @api.get('/produk', tags=['Katalog'])
 def produk_list():
-    db = get_db(); sapu(db)     # pesanan kedaluwarsa dibatalkan dulu agar stok yang tampil akurat
-    return ok([produk_out(p) for p in db.all(PRODUK_SQL + ' ORDER BY p.id')])
+    db = get_db(); sapu(db)     # pesanan kedaluwarsa dibatalkan dulu agar stok yang tampil akurat (sapu sudah commit)
+    return ok([produk_out(p) for p in ProdukService.daftar()])
 
 
 @api.get('/produk/<int:pid>', tags=['Katalog'])
 def produk_detail(pid):
-    p = get_db().one(PRODUK_SQL + ' WHERE p.id=%s', (pid,))
+    p = ProdukService.baris(pid)
     if not p: raise ApiError('Produk tidak ditemukan.', 404)
     return ok(produk_out(p))
 
@@ -242,7 +255,9 @@ def kontak():
     nama, email, jenis, isi = str(b.nama or '').strip(), b.email, b.jenis, str(b.isi or '').strip()
     if len(nama) < 3 or len(nama) > 100: raise ApiError('Nama minimal 3 karakter.')
     if not email_ok(email): raise ApiError('Format email tidak valid.')
-    if jenis not in ('Pertanyaan', 'Keluhan', 'Kerja sama'): raise ApiError('Jenis pesan tidak valid.')
+    if jenis not in JENIS_KONTAK: raise ApiError('Jenis pesan tidak valid.')
     if len(isi) < 10 or len(isi) > 500: raise ApiError('Pesan 10–500 karakter.')
-    get_db().run('INSERT INTO pesan_kontak (nama,email,jenis,isi,dibuat) VALUES (%s,%s,%s,%s,%s)', (nama, email, jenis, isi, now_ms()))
+    db = get_db()
+    db.run('INSERT INTO pesan_kontak (nama,email,jenis,isi,dibuat) VALUES (%s,%s,%s,%s,%s)', (nama, email, jenis, isi, now_ms()))
+    aktivitas.catat(db, 'kontak.kirim', None, 'email:' + str(email), {'nama': nama, 'email': email, 'jenis': jenis, 'isi': aktivitas.ringkas(isi, 120)})   # tamu lewat landing page
     return ok()
