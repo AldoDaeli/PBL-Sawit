@@ -12,6 +12,7 @@ services:
       DB_USER: admin_dimas
       DB_PASSWORD: ${DB_PASSWORD}
       PROXY_HOPS: 1
+      GUNICORN_CMD_ARGS: ${GUNICORN_CMD_ARGS:---workers 2 --threads 4 --timeout 60}
     volumes:
       - uploads:/srv/uploads
     restart: always
